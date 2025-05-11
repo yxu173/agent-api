@@ -1,6 +1,6 @@
 # Simple Agent API
 
-Welcome to the Simple Agent API: a robust, production-ready agentic system for serving Agents using a REST API. Use it to add agentic capabilities to your applications.
+Welcome to the Simple Agent API: a robust, production-ready starting point for serving Agents as an API.
 
 **Core Components:**
   * A **FastAPI server** for handling API requests.
@@ -9,7 +9,7 @@ Welcome to the Simple Agent API: a robust, production-ready agentic system for s
 
 ## Support us
 
-If you like this project, please give [Agno](https://agno.link/gh) a ⭐️.
+If you like this project, please give [Agno](https://agno.link/gh) a ⭐️
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ If you like this project, please give [Agno](https://agno.link/gh) a ⭐️.
 - [Managing Python Dependencies](#managing-python-dependencies)
 - [Community & Support](#community--support)
 
-#### Prerequisites
+### Prerequisites
 
 * **Docker Desktop**: Ensure you have [Docker Desktop](https://www.docker.com/products/docker-desktop) installed and running on your system.
 
@@ -26,114 +26,124 @@ If you like this project, please give [Agno](https://agno.link/gh) a ⭐️.
 
 Follow these steps to get your Agent API up and running:
 
-1.  **Clone the Repository (if you haven't already)**:
+1. **Clone the Repository (if you haven't already)**:
 
-    ```sh
-    git clone https://github.com/agno-agi/agent-api.git
-    cd agent-api
-    ```
+```sh
+git clone https://github.com/agno-agi/agent-api.git
+cd agent-api
+```
 
-2.  **Configure API Keys**:
-    We use GPT 4.1 as the default model, please set the `OPENAI_API_KEY` environment variable to get started.
-    * **Option 1: Environment Variable (recommended for quickstart)**
-      Export the `OPENAI_API_KEY` environment variable in your terminal:
+2. **Configure API Keys**:
 
-      ```sh
-      export OPENAI_API_KEY="YOUR_API_KEY_HERE"
-      ```
+We use GPT 4.1 as the default model, please set the `OPENAI_API_KEY` environment variable to get started.
 
-      Docker Compose will automatically pick up this variable if it's set.
+* **Option 1: Environment Variable (recommended for quickstart)**
+  Export the `OPENAI_API_KEY` environment variable in your terminal:
 
-    * **Option 2: `.env` File**
+  ```sh
+  export OPENAI_API_KEY="YOUR_API_KEY_HERE"
+  ```
 
-      Create a new `.env` file by copying `.env.example` and add your API key there.
+  Docker Compose will automatically pick up this variable if it's set.
 
-      ```sh
-      cp example.env .env
-      ```
+* **Option 2: `.env` File**
 
-    > **Note**: You can use any model provider, just update the agents in the `/agents` folder.
+  Create a new `.env` file by copying `.env.example` and add your API key there.
 
-3.  **Start the Application**:
-    Launch the services using Docker Compose:
+  ```sh
+  cp example.env .env
+  ```
 
-    ```sh
-    docker compose up -d
-    ```
+> **Note**: You can use any model provider, just update the agents in the `/agents` folder.
 
-    This command starts:
-    * The **FastAPI application**, serving on [http://localhost:8000](http://localhost:8000).
-    * The **PostgreSQL database**, accessible on `localhost:5432`.
+3. **Start the Application**:
 
-    Once started, you can:
-    * Explore the API documentation via your browser at [http://localhost:8000/docs](http://localhost:8000/docs).
+Run the application using docker compose:
 
-4.  **Test with Agno Playground**:
-    * Open the [Agno Playground](https://app.agno.com/playground).
-    * Add `http://localhost:8000` as a new endpoint. You can name it `Agent API` (or any name you prefer).
-    * Select your newly added endpoint and start chatting with your Agents.
+```sh
+docker compose up -d
+```
 
-5.  **Stop the Application**:
-    When you're done, stop the containers with:
+This command starts:
+* The **FastAPI application**, serving on [http://localhost:8000](http://localhost:8000).
+* The **PostgreSQL database**, accessible on `localhost:5432`.
 
-    ```sh
-    docker compose down
-    ```
+Once started, you can:
+* Explore the API documentation via your browser at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+4. **Test with Agno Playground**:
+
+* Open the [Agno Playground](https://app.agno.com/playground).
+* Add `http://localhost:8000` as a new endpoint. You can name it `Agent API` (or any name you prefer).
+* Select your newly added endpoint and start chatting with your Agents.
+
+5. **Stop the Application**:
+
+When you're done, stop the application using:
+
+```sh
+docker compose down
+```
 
 ## Development Setup
 
 To setup your local virtual environment:
 
-1.  **Install `uv`**:
-    We use `uv` for python environment and package management. Install it by following the instructions on the [official `uv` documentation](https://docs.astral.sh/uv/#getting-started) or use the command below for Unix-like systems:
+1. **Install `uv`**:
 
-    ```sh
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
+We use `uv` for python environment and package management. Install it by following the instructions on the [official `uv` documentation](https://docs.astral.sh/uv/#getting-started) or use the command below for Unix-like systems:
 
-2.  **Create Virtual Environment & Install Dependencies**:
-    Run the setup script. This will create a virtual environment (typically `.venv`) and install project dependencies:
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-    ```sh
-    ./scripts/dev_setup.sh
-    ```
+2. **Create Virtual Environment & Install Dependencies**:
 
-3.  **Activate Virtual Environment**:
-    Activate the created virtual environment:
+Run the setup script. This will create a virtual environment (typically `.venv`) and install project dependencies:
 
-    ```sh
-    source .venv/bin/activate
-    ```
+```sh
+./scripts/dev_setup.sh
+```
 
-    (On Windows, the activation command might differ, e.g., `.venv\Scripts\activate`)
+3. **Activate Virtual Environment**:
+
+Activate the created virtual environment:
+
+```sh
+source .venv/bin/activate
+```
+
+(On Windows, the activation command might differ, e.g., `.venv\Scripts\activate`)
 
 ## Managing Python Dependencies
 
 If you need to add or update python dependencies:
 
-1.  **Modify `pyproject.toml`**:
+1. **Modify `pyproject.toml`**:
 
-    Add or update your desired Python package dependencies in the `[dependencies]` section of the `pyproject.toml` file.
+Add or update your desired Python package dependencies in the `[dependencies]` section of the `pyproject.toml` file.
 
-2.  **Generate `requirements.txt`**:
-    The `requirements.txt` file is used to build the application image. After modifying `pyproject.toml`, regenerate `requirements.txt` using:
+2. **Generate `requirements.txt`**:
 
-    ```sh
-    ./scripts/generate_requirements.sh
-    ```
+The `requirements.txt` file is used to build the application image. After modifying `pyproject.toml`, regenerate `requirements.txt` using:
 
-    To upgrade all existing dependencies to their latest compatible versions, run:
+```sh
+./scripts/generate_requirements.sh
+```
 
-    ```sh
-    ./scripts/generate_requirements.sh upgrade
-    ```
+To upgrade all existing dependencies to their latest compatible versions, run:
 
-3.  **Rebuild Docker Images**:
-    Rebuild your Docker images to include the updated dependencies:
+```sh
+./scripts/generate_requirements.sh upgrade
+```
 
-    ```sh
-    docker compose up -d --build
-    ```
+3. **Rebuild Docker Images**:
+
+Rebuild your Docker images to include the updated dependencies:
+
+```sh
+docker compose up -d --build
+```
 
 ## Running in production
 
@@ -142,19 +152,19 @@ This repo provides a Dockerfile that you can use to run the application in produ
 1. Update the `scripts/build_image.sh` file and set your IMAGE_NAME and IMAGE_TAG variables.
 2. Build and push the image to your container registry:
 
-    ```sh
-    ./scripts/build_image.sh
-    ```
+```sh
+./scripts/build_image.sh
+```
 3. Run in your cloud provider of choice.
 
 ## Community & Support
 
 Need help, have a question, or want to connect with the community?
 
-*   📚 **[Read the Agno Docs](https://docs.agno.com)** for more in-depth information.
-*   💬 **Chat with us on [Discord](https://agno.link/discord)** for live discussions.
-*   ❓ **Ask a question on [Discourse](https://agno.link/community)** for community support.
-*   🐛 **[Report an Issue](https://github.com/agno-agi/agent-api/issues)** on GitHub if you find a bug or have a feature request.
+* 📚 **[Read the Agno Docs](https://docs.agno.com)** for more in-depth information.
+* 💬 **Chat with us on [Discord](https://agno.link/discord)** for live discussions.
+* ❓ **Ask a question on [Discourse](https://agno.link/community)** for community support.
+* 🐛 **[Report an Issue](https://github.com/agno-agi/agent-api/issues)** on GitHub if you find a bug or have a feature request.
 
 ## Running in Production
 
