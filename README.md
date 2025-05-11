@@ -1,39 +1,28 @@
 # Simple Agent API
 
-Welcome to the Simple Agent API: a robust, production-ready codebase for serving Agents as an API.
+Welcome to the Simple Agent API: a robust, production-ready application for serving Agents as an API.
 
 **Core Components:**
   * A **FastAPI server** for handling API requests.
   * A **PostgreSQL database** for storing Agent sessions, knowledge, and memories.
   * A set of **pre-built Agents** to use as a starting point.
 
-## Support us
-
-If you like this project, please give [Agno](https://agno.link/gh) a ⭐️
-
-## Table of Contents
-
-- [Quickstart](#quickstart)
-- [Development Setup](#development-setup)
-- [Managing Python Dependencies](#managing-python-dependencies)
-- [Community & Support](#community--support)
-
-### Prerequisites
-
-* **Docker Desktop**: Ensure you have [Docker Desktop](https://www.docker.com/products/docker-desktop) installed and running on your system.
+For more information, please checkout [Agno](https://agno.link/gh) and give it a ⭐️
 
 ## Quickstart
 
 Follow these steps to get your Agent API up and running:
 
-### Clone the Repository (if you haven't already)
+> Please ensure you have [Docker Desktop](https://www.docker.com/products/docker-desktop) installed and running.
+
+### Clone the repo
 
 ```sh
 git clone https://github.com/agno-agi/agent-api.git
 cd agent-api
 ```
 
-### Configure API Keys
+### Configure API keys
 
 We use GPT 4.1 as the default model, please export the `OPENAI_API_KEY` environment variable to get started.
 
@@ -43,7 +32,7 @@ export OPENAI_API_KEY="YOUR_API_KEY_HERE"
 
 > **Note**: You can use any model provider, just update the agents in the `/agents` folder.
 
-### Start the Application
+### Start the application
 
 Run the application using docker compose:
 
@@ -64,7 +53,7 @@ Once started, you can:
 * Add `http://localhost:8000` as a new endpoint. You can name it `Agent API` (or any name you prefer).
 * Select your newly added endpoint and start chatting with your Agents.
 
-### Stop the Application
+### Stop the application
 
 When you're done, stop the application using:
 
