@@ -1,11 +1,11 @@
 # Simple Agent API
 
-Welcome to the Simple Agent API: a robust, production-ready starting point for serving Agents as an API.
+Welcome to the Simple Agent API: a robust, production-ready codebase for serving Agents as an API.
 
 **Core Components:**
   * A **FastAPI server** for handling API requests.
   * A **PostgreSQL database** for storing Agent sessions, knowledge, and memories.
-  * A set of **pre-built Agents** to use as a foundation for your projects.
+  * A set of **pre-built Agents** to use as a starting point.
 
 ## Support us
 
@@ -35,24 +35,11 @@ cd agent-api
 
 ### Configure API Keys
 
-We use GPT 4.1 as the default model, please set the `OPENAI_API_KEY` environment variable to get started.
+We use GPT 4.1 as the default model, please export the `OPENAI_API_KEY` environment variable to get started.
 
-* **Option 1: Environment Variable (recommended for quickstart)**
-  Export the `OPENAI_API_KEY` environment variable in your terminal:
-
-  ```sh
-  export OPENAI_API_KEY="YOUR_API_KEY_HERE"
-  ```
-
-  Docker Compose will automatically pick up this variable if it's set.
-
-* **Option 2: `.env` File**
-
-  Create a new `.env` file by copying `.env.example` and add your API key there.
-
-  ```sh
-  cp example.env .env
-  ```
+```sh
+export OPENAI_API_KEY="YOUR_API_KEY_HERE"
+```
 
 > **Note**: You can use any model provider, just update the agents in the `/agents` folder.
 
@@ -65,13 +52,13 @@ docker compose up -d
 ```
 
 This command starts:
-* The **FastAPI application**, serving on [http://localhost:8000](http://localhost:8000).
+* The **FastAPI server**, running on [http://localhost:8000](http://localhost:8000).
 * The **PostgreSQL database**, accessible on `localhost:5432`.
 
 Once started, you can:
-* Explore the API documentation via your browser at [http://localhost:8000/docs](http://localhost:8000/docs).
+* Test the API at [http://localhost:8000/docs](http://localhost:8000/docs).
 
-### Test with Agno Playground
+### Connect to Agno Playground or Agent UI
 
 * Open the [Agno Playground](https://app.agno.com/playground).
 * Add `http://localhost:8000` as a new endpoint. You can name it `Agent API` (or any name you prefer).
@@ -91,7 +78,7 @@ To setup your local virtual environment:
 
 ### Install `uv`
 
-We use `uv` for python environment and package management. Install it by following the instructions on the [official `uv` documentation](https://docs.astral.sh/uv/#getting-started) or use the command below for Unix-like systems:
+We use `uv` for python environment and package management. Install it by following the the [`uv` documentation](https://docs.astral.sh/uv/#getting-started) or use the command below for unix-like systems:
 
 ```sh
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -99,7 +86,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ### Create Virtual Environment & Install Dependencies
 
-Run the setup script. This will create a virtual environment (typically `.venv`) and install project dependencies:
+Run the `dev_setup.sh` script. This will create a virtual environment and install project dependencies:
 
 ```sh
 ./scripts/dev_setup.sh
@@ -113,17 +100,17 @@ Activate the created virtual environment:
 source .venv/bin/activate
 ```
 
-(On Windows, the activation command might differ, e.g., `.venv\Scripts\activate`)
+(On Windows, the command might differ, e.g., `.venv\Scripts\activate`)
 
 ## Managing Python Dependencies
 
 If you need to add or update python dependencies:
 
-### Modify `pyproject.toml`
+### Modify pyproject.toml
 
 Add or update your desired Python package dependencies in the `[dependencies]` section of the `pyproject.toml` file.
 
-### Generate `requirements.txt`
+### Generate requirements.txt
 
 The `requirements.txt` file is used to build the application image. After modifying `pyproject.toml`, regenerate `requirements.txt` using:
 
@@ -156,7 +143,9 @@ Need help, have a question, or want to connect with the community?
 
 ## Running in Production
 
-This repository includes a `Dockerfile` for building a production-ready container image of the application. The general process is:
+This repository includes a `Dockerfile` for building a production-ready container image of the application.
+
+The general process to run in production is:
 
 1. Update the `scripts/build_image.sh` file and set your IMAGE_NAME and IMAGE_TAG variables.
 2. Build and push the image to your container registry:
