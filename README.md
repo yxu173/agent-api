@@ -135,6 +135,18 @@ If you need to add or update python dependencies:
     docker compose up -d --build
     ```
 
+## Running in production
+
+This repo provides a Dockerfile that you can use to run the application in production. Here's the general process:
+
+1. Update the `scripts/build_image.sh` file and set your IMAGE_NAME and IMAGE_TAG variables.
+2. Build and push the image to your container registry:
+
+    ```sh
+    ./scripts/build_image.sh
+    ```
+3. Run in your cloud provider of choice.
+
 ## Community & Support
 
 Need help, have a question, or want to connect with the community?
@@ -143,3 +155,46 @@ Need help, have a question, or want to connect with the community?
 *   💬 **Chat with us on [Discord](https://agno.link/discord)** for live discussions.
 *   ❓ **Ask a question on [Discourse](https://agno.link/community)** for community support.
 *   🐛 **[Report an Issue](https://github.com/agno-agi/agent-api/issues)** on GitHub if you find a bug or have a feature request.
+
+## Running in Production
+
+This repository includes a `Dockerfile` for building a production-ready container image of the application. Here's a general guide to deploying it:
+
+1.  **Configure for Production**:
+    * Ensure your production environment variables (e.g., `OPENAI_API_KEY`, database connection strings) are securely managed. Most cloud providers offer a way to set these as environment variables for your deployed service.
+    * Review the agent configurations in the `/agents` directory and ensure they are set up for your production needs (e.g., correct model versions, any production-specific settings).
+
+2.  **Build Your Production Docker Image**:
+    * Update the `scripts/build_image.sh` script to set your desired `IMAGE_NAME` and `IMAGE_TAG` (e.g., `your-repo/agent-api:v1.0.0`).
+    * Run the script to build and push the image:
+
+      ```sh
+      ./scripts/build_image.sh
+      ```
+
+3.  **Deploy to a Cloud Service**:
+    With your image in a registry, you can deploy it to various cloud services that support containerized applications. Some common options include:
+
+    *   **Serverless Container Platforms**:
+        *   **Google Cloud Run**: A fully managed platform that automatically scales your stateless containers. Ideal for HTTP-driven applications.
+        *   **AWS App Runner**: Similar to Cloud Run, AWS App Runner makes it easy to deploy containerized web applications and APIs at scale.
+        *   **Azure Container Apps**: Build and deploy modern apps and microservices using serverless containers.
+
+    *   **Container Orchestration Services**:
+        *   **Amazon Elastic Container Service (ECS)**: A highly scalable, high-performance container orchestration service that supports Docker containers. Often used with AWS Fargate for serverless compute or EC2 instances for more control.
+        *   **Google Kubernetes Engine (GKE)**: A managed Kubernetes service for deploying, managing, and scaling containerized applications using Google infrastructure.
+        *   **Azure Kubernetes Service (AKS)**: A managed Kubernetes service for deploying and managing containerized applications in Azure.
+
+    *   **Platform as a Service (PaaS) with Docker Support**:
+        *   **Railway.app**: Offers a simple way to deploy applications from a Dockerfile. It handles infrastructure, scaling, and networking.
+        *   **Render**: Another platform that simplifies deploying Docker containers, databases, and static sites.
+        *   **Heroku**: While traditionally known for buildpacks, Heroku also supports deploying Docker containers.
+
+    *   **Specialized Platforms**:
+        *   **Modal**: A platform designed for running Python code (including web servers like FastAPI) in the cloud, often with a focus on batch jobs, scheduled functions, and model inference, but can also serve web endpoints.
+
+    The specific deployment steps will vary depending on the chosen provider. Generally, you'll point the service to your container image in the registry and configure aspects like port mapping (the application runs on port 8000 by default inside the container), environment variables, scaling parameters, and any necessary database connections.
+
+5.  **Database Configuration**:
+    *   The default `docker-compose.yml` sets up a PostgreSQL database for local development. In production, you will typically use a managed database service provided by your cloud provider (e.g., AWS RDS, Google Cloud SQL, Azure Database for PostgreSQL) for better reliability, scalability, and manageability.
+    *   Ensure your deployed application is configured with the correct database connection URL for your production database instance. This is usually set via an environment variables.
