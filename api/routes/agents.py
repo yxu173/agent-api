@@ -1,7 +1,8 @@
 from enum import Enum
 from logging import getLogger
 from typing import AsyncGenerator, List, Optional
-
+import pandas as pd
+from io import StringIO
 from agno.agent import Agent, AgentKnowledge
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -22,6 +23,7 @@ agents_router = APIRouter(prefix="/agents", tags=["Agents"])
 class Model(str, Enum):
     gpt_4_1 = "gpt-4.1"
     o4_mini = "o4-mini"
+    seo_keyword_agent = "seo_keyword_agent"
 
 
 @agents_router.get("", response_model=List[str])
