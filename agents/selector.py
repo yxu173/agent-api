@@ -5,6 +5,7 @@ from agents.agno_assist import get_agno_assist
 from agents.finance_agent import get_finance_agent
 from agents.web_agent import get_web_agent
 from agents.seo_keyword_agent import get_seo_keyword_agent
+from agents.enhanced_csv_agent import get_enhanced_csv_agent
 
 
 class AgentType(Enum):
@@ -13,6 +14,7 @@ class AgentType(Enum):
     FINANCE_AGENT = "finance_agent"
     CSV_AGENT = "csv_agent"
     SEO_KEYWORD_AGENT = "seo_keyword_agent"
+    ENHANCED_CSV_AGENT = "enhanced_csv_agent"
 
 
 def get_available_agents() -> List[str]:
@@ -35,4 +37,6 @@ def get_agent(
         return get_finance_agent(model_id=model_id, user_id=user_id, session_id=session_id, debug_mode=debug_mode)
     elif agent_id == AgentType.SEO_KEYWORD_AGENT:
         return get_seo_keyword_agent(model_id=model_id, user_id=user_id, session_id=session_id, debug_mode=debug_mode)
+    elif agent_id == AgentType.ENHANCED_CSV_AGENT:
+        return get_enhanced_csv_agent(model_id=model_id, user_id=user_id, session_id=session_id, debug_mode=debug_mode)
     raise ValueError(f"Agent: {agent_id} not found")

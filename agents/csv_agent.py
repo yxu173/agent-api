@@ -3,40 +3,49 @@ from pydantic import BaseModel, Field
 from agno.agent import Agent
 from agno.models.openai import OpenAIChat
 from textwrap import dedent
+from agno.storage.agent.postgres import PostgresAgentStorage
+from db.session import db_url
+import pandas as pd
+from io import StringIO
 
-from agno.storage.sqlite import SqliteStorage
 
 class KeywordEvaluation(BaseModel):
     keyword: str = Field(..., description="The keyword being evaluated.")
     reason: str = Field(..., description="The reason for inclusion or exclusion.")
 
+
 class SEOKeywordAnalysis(BaseModel):
-    audience_analysis: str = Field(..., description="Detailed statement of target audience analysis and relevant characteristics.")
+    audience_analysis: str = Field(...,
+                                   description="Detailed statement of target audience analysis and relevant characteristics.")
     valuable_keywords: List[KeywordEvaluation] = Field(..., description="List of valuable keywords and reasons.")
 
-def get_seo_keyword_agent(
+
+class CSVProcessingResult(BaseModel):
+    valuable_keywords_found: int = Field(..., description="The total number of valuable keywords found.")
+    output_path: str = Field(..., description="The path to the output CSV file.")
+
+
+def get_csv_agent(
     model_id: str = "o4-mini",
     user_id: Optional[str] = None,
     session_id: Optional[str] = None,
     debug_mode: bool = True,
 ) -> Agent:
     return Agent(
-        name="SEO Keyword Agent",
-        agent_id="seo_keyword_agent",
+        name="CSV Keyword Agent",
+        agent_id="csv_agent",
         model=OpenAIChat(id=model_id),
         user_id=user_id,
         session_id=session_id,
-        instructions=dedent("""
+        instructions=dedent('''
             You are a Seasoned SEO professional specializing in keyword analysis, At the same time you are an expert content creator (these previous two personalities should work in harmony and compatibility), Your task is objectively evaluating keywords for optimal SEO segments, and given complete keyword lists. Choose Keywords that are valuable and useful to readers., as these selected keywords will be used to create informative blog articles.
 
             Ensure that all evaluations are made solely based on the provided criteria without introducing any personal opinions or assumptions.
             ________________________________________________________________
-            **The inputs you will get:**
-            - Keywords: {insert keywords}
-            - Category of each keyword: {category} ( these categories are beneath the given niche.
-            NICHE IS { Herbalism } FOR ALL KEYWORDS
+            The user will provide a message containing the keywords to analyze and their category.
+            The niche for all keywords is "Herbalism".
             ________________________________________________________________
-            First: analyze the keywords carefully to understand its context and its intent ( informational - commercial - Navigational - Transactional ), to determine the target audience whether it is (beginners OR intermediates OR experts) for the keywords. 
+            First: analyze the keywords carefully to understand its context and its intent ( informational - commercial - Navigational - Transactional ), to determine the target audience whether it is (beginners OR intermediates OR experts) for the keywords.
             ________________________________________________________________
             **Now,follow the following criteria to choose the valuable keywords:**
             1-Give all Keywords the same level of attention.
@@ -79,20 +88,63 @@ def get_seo_keyword_agent(
             IMPORTANT: Only select keywords that are a single word (no spaces, not a phrase, not a question, not a sentence). Exclude any keyword that is not a single word. For both valuable and excluded keywords, the 'keyword' field must contain only a single word.
             ________________________________________________________________
             **Several lists of keywords will be provided in the same chat, so you are required to deal with each list completely independently to avoid confusion or merging or comparing between the lists.**
-            ________________________________________________________________
-            The instructions are finished, so after analyzing and understanding them well and in a coherent manner, ask for the inputs.
-        """),
+        '''),
         add_state_in_messages=True,
-        storage=SqliteStorage(
-            table_name="agent_sessions",
-            db_file="tmp/seo_keyword_agent_sessions.db",
-        ),
+        storage=PostgresAgentStorage(table_name="csv_agent_sessions", db_url=db_url),
         add_history_to_messages=True,
         num_history_runs=3,
         read_chat_history=True,
         response_model=SEOKeywordAnalysis,
         use_json_mode=True,
         debug_mode=debug_mode,
-        stream=True,
+        stream=False,
+    )
 
-    ) 
+
+async def process_csv_file(agent: Agent, file_path: str, output_path: str, keyword_column: str = 'keyword',
+                           category_column: str = 'category') -> CSVProcessingResult:
+    try:
+        df = pd.read_csv(file_path)
+    except FileNotFoundError:
+        raise ValueError(f"File not found: {file_path}")
+    except Exception as e:
+        raise ValueError(f"Error reading CSV file: {e}")
+
+    if keyword_column not in df.columns:
+        raise ValueError(f"Keyword column '{keyword_column}' not found in the CSV file.")
+    if category_column not in df.columns:
+        raise ValueError(f"Category column '{category_column}' not found in the CSV file.")
+
+    total_rows = len(df)
+    chunk_size = 100
+    all_valuable_keywords = []
+
+    for start in range(0, total_rows, chunk_size):
+        end = min(start + chunk_size, total_rows)
+        chunk_df = df.iloc[start:end]
+
+        keywords_with_category = chunk_df[[keyword_column, category_column]].to_dict('records')
+
+        message = "Please analyze the following keywords:\n"
+        for item in keywords_with_category:
+            message += f"- Keyword: {item[keyword_column]}, Category: {item[category_column]}\n"
+
+        run_result = await agent.arun(message, stream=False)
+
+        if isinstance(run_result.content, SEOKeywordAnalysis):
+            analysis_result = run_result.content
+            all_valuable_keywords.extend(analysis_result.valuable_keywords)
+        else:
+            print(f"Warning: Received unexpected response type from agent for chunk {start}-{end}. Skipping.")
+            continue
+
+    if all_valuable_keywords:
+        output_df = pd.DataFrame([k.dict() for k in all_valuable_keywords])
+        output_df.to_csv(output_path, index=False)
+    else:
+        pd.DataFrame(columns=['keyword', 'reason']).to_csv(output_path, index=False)
+
+    return CSVProcessingResult(
+        valuable_keywords_found=len(all_valuable_keywords),
+        output_path=output_path
+    )
