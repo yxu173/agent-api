@@ -15,7 +15,6 @@ from agno.workflow.v2.workflow import Workflow
 from agno.workflow.v2 import Loop
 from pydantic import BaseModel, Field
 
-# Global variable to track current row position in Excel files
 current_row_position = 0
 
 
@@ -148,12 +147,10 @@ def get_current_excel_position() -> int:
 def has_more_chunks(excel_file_path: str) -> bool:
     """Check if there are more chunks available in the Excel file CATEGORY sheet."""
     try:
-        # Try CalamineWorkbook first, then fallback to pandas
         try:
             from python_calamine import CalamineWorkbook
             workbook = CalamineWorkbook.from_path(excel_file_path)
             
-            # Check if CATEGORY sheet exists
             sheet_names = workbook.sheet_names
             if "CATEGORY" not in sheet_names:
                 sheet_name = sheet_names[0] if sheet_names else "Sheet1"
@@ -162,11 +159,9 @@ def has_more_chunks(excel_file_path: str) -> bool:
             
             sheet_data = workbook.get_sheet_by_name(sheet_name).to_python()
             
-            # Convert to DataFrame
             if sheet_data:
-                # Use first row as headers
                 headers = sheet_data[0]
-                data = sheet_data[1:]  # Skip header row
+                data = sheet_data[1:]  
                 df = pd.DataFrame(data, columns=headers)
             else:
                 df = pd.DataFrame()
@@ -198,12 +193,10 @@ def has_more_chunks(excel_file_path: str) -> bool:
 def get_excel_file_info(excel_file_path: str) -> dict:
     """Get information about the Excel file CATEGORY sheet."""
     try:
-        # Try CalamineWorkbook first, then fallback to pandas
         try:
             from python_calamine import CalamineWorkbook
             workbook = CalamineWorkbook.from_path(excel_file_path)
             
-            # Check if CATEGORY sheet exists
             sheet_names = workbook.sheet_names
             print(f"Available sheets: {sheet_names}")
             
@@ -255,7 +248,6 @@ def get_excel_file_info(excel_file_path: str) -> dict:
 def process_excel_chunk_step(step_input: StepInput) -> StepOutput:
     """Process a single chunk of Excel data (100 rows) and send to AI agent."""
     try:
-        # Get the Excel file path from workflow state or use default
         session_id = 'default'
         if hasattr(step_input, 'workflow_session_state') and step_input.workflow_session_state:
             session_id = step_input.workflow_session_state.get('session_id', 'default')
@@ -656,7 +648,6 @@ def base64_to_excel_step(step_input: StepInput) -> StepOutput:
 def prepare_excel_chunk_step(step_input: StepInput) -> StepOutput:
     """Prepare Excel chunk data for keyword analysis."""
     try:
-        # Extract file path from previous step's message
         message = step_input.previous_step_content
         print(f"DEBUG: prepare_excel_chunk_step received message: {message[:100]}...")
         
@@ -869,12 +860,10 @@ def accumulate_analysis_results(step_input: StepInput) -> StepOutput:
 def save_session_results(step_input: StepInput) -> StepOutput:
     """Finalize the session Excel file and provide download link."""
     
-    # Get session ID from workflow session state or use default
     session_id = 'default'
     if hasattr(step_input, 'workflow_session_state') and step_input.workflow_session_state:
         session_id = step_input.workflow_session_state.get('session_id', 'default')
     
-    # Check the session Excel file
     session_excel_file = f"tmp/session_keywords_{session_id}.xlsx"
     session_keywords = []
     
@@ -895,114 +884,6 @@ def save_session_results(step_input: StepInput) -> StepOutput:
         )
 
 
-def create_excel_workflow(
-    model_id: str = "o4-mini",
-    user_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-    debug_mode: bool = True,
-) -> Workflow:
-    """Create an Excel processing workflow using Agno workflow v2."""
-    
-    # Create the analysis agent
-    analysis_agent = create_excel_analysis_agent(
-        model_id=model_id,
-        user_id=user_id,
-        session_id=session_id,
-        debug_mode=debug_mode
-    )
-    
-    # Create the workflow
-    workflow = Workflow(
-        name="Excel Keyword Processing Workflow",
-        description="Process base64 Excel files containing keywords and analyze them for SEO value",
-        storage=SqliteStorage(
-            table_name="excel_processing_workflow",
-            db_file="tmp/excel_processing_workflow.db",
-            mode="workflow_v2",
-        ),
-        steps=[
-            base64_to_excel_step,
-            prepare_excel_chunk_step,
-            analysis_agent,
-            accumulate_analysis_results,
-            save_session_results,
-        ],
-    )
-    
-    return workflow
-
-
-def create_playground_excel_workflow(
-    model_id: str = "o4-mini",
-    user_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-    debug_mode: bool = True,
-) -> Workflow:
-    """Create an Excel processing workflow for the playground interface."""
-    
-    # Create the analysis agent
-    analysis_agent = create_excel_analysis_agent(
-        model_id=model_id,
-        user_id=user_id,
-        session_id=session_id,
-        debug_mode=debug_mode
-    )
-    
-    # Create the workflow
-    workflow = Workflow(
-        name="Excel Keyword Analysis Workflow",
-        description="Process base64 Excel files or direct keywords and analyze them for SEO value. Each message processes keywords from the Excel file.",
-        storage=SqliteStorage(
-            table_name="excel_playground_workflow",
-            db_file="tmp/excel_playground_workflow.db",
-            mode="workflow_v2",
-        ),
-        steps=[
-            base64_to_excel_step,
-            prepare_excel_chunk_step,
-            analysis_agent,
-            accumulate_analysis_results,
-        ],
-    )
-    
-    return workflow
-
-
-def create_session_based_excel_workflow(
-    model_id: str = "o4-mini",
-    user_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-    debug_mode: bool = True,
-) -> Workflow:
-    """Create an Excel processing workflow that accumulates results across multiple runs."""
-    
-    # Create the analysis agent
-    analysis_agent = create_excel_analysis_agent(
-        model_id=model_id,
-        user_id=user_id,
-        session_id=session_id,
-        debug_mode=debug_mode
-    )
-    
-    # Create the workflow with session-based accumulation
-    workflow = Workflow(
-        name="Excel Session-Based Analysis Workflow",
-        description="Process base64 Excel files containing keywords and analyze them for SEO value with session-based accumulation",
-        storage=SqliteStorage(
-            table_name="excel_session_workflow",
-            db_file="tmp/excel_session_workflow.db",
-            mode="workflow_v2",
-        ),
-        steps=[
-            base64_to_excel_step,
-            prepare_excel_chunk_step,
-            analysis_agent,
-            accumulate_analysis_results,
-            save_session_results,
-        ],
-    )
-    
-    return workflow
 
 
 def create_loop_excel_workflow(
@@ -1013,7 +894,6 @@ def create_loop_excel_workflow(
 ) -> Workflow:
     """Create a loop-based Excel processing workflow using Agno workflow v2."""
     
-    # Create the analysis agent
     analysis_agent = create_excel_analysis_agent(
         model_id=model_id,
         user_id=user_id,
@@ -1021,12 +901,10 @@ def create_loop_excel_workflow(
         debug_mode=debug_mode
     )
     
-    # Initialize workflow session state
     workflow_session_state = {}
     if session_id:
         workflow_session_state['session_id'] = session_id
     
-    # Create the workflow with loop
     workflow = Workflow(
         name="Loop Excel Processing Workflow",
         description="Process Excel file in chunks of 100 rows using loop execution",
@@ -1051,324 +929,11 @@ def create_loop_excel_workflow(
     return workflow
 
 
-def create_playground_loop_excel_workflow(
-    model_id: str = "o4-mini",
-    user_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-    debug_mode: bool = True,
-) -> Workflow:
-    """Create a loop-based Excel processing workflow for the playground interface."""
-    
-    # Create the analysis agent
-    analysis_agent = create_excel_analysis_agent(
-        model_id=model_id,
-        user_id=user_id,
-        session_id=session_id,
-        debug_mode=debug_mode
-    )
-    
-    # Initialize workflow session state
-    workflow_session_state = {}
-    if session_id:
-        workflow_session_state['session_id'] = session_id
-    
-    # Create the workflow with loop
-    workflow = Workflow(
-        name="Playground Loop Excel Processing Workflow",
-        description="Process Excel file in chunks of 100 rows using loop execution for playground",
-        storage=SqliteStorage(
-            table_name="excel_playground_loop_workflow",
-            db_file="tmp/excel_playground_loop_workflow.db",
-            mode="workflow_v2",
-        ),
-        steps=[
-            base64_to_excel_step,
-            Loop(
-                name="Excel Processing Loop",
-                steps=[process_excel_chunk_step, analysis_agent, save_chunk_results_step],
-                end_condition=excel_loop_end_condition,
-                max_iterations=1000,
-            ),
-        ],
-        workflow_session_state=workflow_session_state,
-    )
-    
-    return workflow
 
-
-async def process_base64_excel_complete(
-    base64_string: str,
-    chunk_size: int = 100,
-    model_id: str = "o4-mini",
-    user_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-) -> ExcelProcessingResult:
-    """
-    Process base64 Excel file completely using workflow.
-    
-    Args:
-        base64_string: Base64 encoded Excel file
-        chunk_size: Number of columns to process in each chunk
-        model_id: OpenAI model ID to use
-        user_id: User ID for the agent
-        session_id: Session ID for the agent
-    
-    Returns:
-        ExcelProcessingResult with processing information
-    """
-    
-    # Create the workflow
-    workflow = create_excel_workflow(
-        model_id=model_id,
-        user_id=user_id,
-        session_id=session_id,
-        debug_mode=True
-    )
-    
-    result = await workflow.arun(base64_string)
-    
-    session_id = session_id or 'default'
-    session_excel_file = f"tmp/session_keywords_{session_id}.xlsx"
-    
-    valuable_keywords_found = 0
-    processed_chunks = 0
-    
-    if os.path.exists(session_excel_file):
-        try:
-            df = pd.read_excel(session_excel_file)
-            valuable_keywords_found = len(df)
-            processed_chunks = 1  # Since we're processing one file at a time
-        except:
-            pass
-    
-    return ExcelProcessingResult(
-        valuable_keywords_found=valuable_keywords_found,
-        output_path=session_excel_file,
-        processed_chunks=processed_chunks
-    )
-
-async def process_excel_file_complete(
-    excel_file_path: str,
-    chunk_size: int = 100,
-    model_id: str = "o4-mini",
-    user_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-) -> ExcelProcessingResult:
-    """
-    Process entire Excel file in chunks automatically.
-    
-    Args:
-        excel_file_path: Path to the Excel file
-        chunk_size: Number of rows to process in each chunk
-        model_id: OpenAI model ID to use
-        user_id: User ID for the agent
-        session_id: Session ID for the agent
-    
-    Returns:
-        ExcelProcessingResult with processing information
-    """
-    
-    # Reset position for new file
-    reset_excel_position()
-    
-    # Create the analysis agent
-    analysis_agent = create_excel_analysis_agent(
-        model_id=model_id,
-        user_id=user_id,
-        session_id=session_id,
-        debug_mode=True
-    )
-    
-    session_id = session_id or 'default'
-    session_excel_file = f"tmp/session_keywords_{session_id}.xlsx"
-    
-    # Remove existing session file if it exists
-    if os.path.exists(session_excel_file):
-        os.remove(session_excel_file)
-    
-    processed_chunks = 0
-    total_keywords_processed = 0
-    
-    try:
-        # Get file info
-        file_info = get_excel_file_info(excel_file_path)
-        total_rows = file_info.get('total_rows', 0)
-        
-        if total_rows == 0:
-            return ExcelProcessingResult(
-                valuable_keywords_found=0,
-                output_path=session_excel_file,
-                processed_chunks=0
-            )
-        
-        print(f"Starting to process Excel file with {total_rows} rows in chunks of {chunk_size}")
-        
-        # Process chunks until end of file
-        while True:
-            # Read next chunk
-            chunk_df, start_row, end_row = read_excel_chunk_with_calamine(excel_file_path, chunk_size=chunk_size)
-            
-            if chunk_df.empty:
-                print("Reached end of file, processing complete")
-                break
-            
-            processed_chunks += 1
-            print(f"Processing chunk {processed_chunks}: rows {start_row + 1} to {end_row}")
-            
-            # Prepare keywords for analysis
-            keyword_column = None
-            category_column = None
-            
-            for col in chunk_df.columns:
-                col_lower = str(col).lower()
-                if any(keyword in col_lower for keyword in ['keyword', 'term', 'phrase', 'word']):
-                    keyword_column = col
-                elif any(cat in col_lower for cat in ['category', 'type', 'class', 'group']):
-                    category_column = col
-            
-            if not keyword_column:
-                keyword_column = chunk_df.columns[0]
-            
-            if not category_column:
-                category_column = 'category'
-                chunk_df[category_column] = 'general'
-            
-            # Extract keywords
-            keywords_with_category = []
-            for _, row in chunk_df.iterrows():
-                keyword = str(row[keyword_column]).strip()
-                category = str(row[category_column]).strip()
-                if keyword and keyword.lower() not in ['nan', 'none', '']:
-                    keywords_with_category.append({
-                        'keyword': keyword,
-                        'category': category
-                    })
-            
-            if keywords_with_category:
-                # Prepare message for AI agent
-                keywords_text = f"Please analyze the following keywords from the Excel file (rows {start_row + 1} to {end_row}):\n\n"
-                for item in keywords_with_category:
-                    keywords_text += f"- Keyword: {item['keyword']}, Category: {item['category']}\n"
-                
-                # Send to AI agent
-                try:
-                    result = await analysis_agent.arun(keywords_text)
-                    
-                    if hasattr(result, 'valuable_keywords'):
-                        valuable_keywords = result.valuable_keywords
-                        total_keywords_processed += len(valuable_keywords)
-                        
-                        # Save to session file
-                        keywords_data = []
-                        for keyword_eval in valuable_keywords:
-                            keywords_data.append({
-                                'keyword': keyword_eval.keyword,
-                                'reason': keyword_eval.reason
-                            })
-                        
-                        # Load existing results
-                        existing_keywords = []
-                        if os.path.exists(session_excel_file):
-                            try:
-                                existing_df = pd.read_excel(session_excel_file)
-                                existing_keywords = existing_df.to_dict('records')
-                            except:
-                                existing_keywords = []
-                        
-                        # Add new keywords
-                        existing_keywords.extend(keywords_data)
-                        
-                        # Save updated results
-                        if existing_keywords:
-                            df = pd.DataFrame(existing_keywords)
-                            df.to_excel(session_excel_file, index=False)
-                        
-                        print(f"Chunk {processed_chunks} processed: {len(valuable_keywords)} valuable keywords found")
-                    else:
-                        print(f"Chunk {processed_chunks} processed: No valuable keywords found")
-                        
-                except Exception as e:
-                    print(f"Error processing chunk {processed_chunks}: {e}")
-                    continue
-            else:
-                print(f"Chunk {processed_chunks}: No valid keywords found")
-        
-        print(f"Processing complete! Processed {processed_chunks} chunks, found {total_keywords_processed} valuable keywords")
-        
-        return ExcelProcessingResult(
-            valuable_keywords_found=total_keywords_processed,
-            output_path=session_excel_file,
-            processed_chunks=processed_chunks
-        )
-        
-    except Exception as e:
-        print(f"Error in process_excel_file_complete: {e}")
-        return ExcelProcessingResult(
-            valuable_keywords_found=total_keywords_processed,
-            output_path=session_excel_file,
-            processed_chunks=processed_chunks
-        )
 
 async def main():
-    """Example usage of the Excel workflow."""
-    # Example 1: Process base64 Excel file with loop workflow
-    base64_excel = "base64_encoded_excel_file_content_here"
-    
-    # Create loop workflow
-    loop_workflow = create_loop_excel_workflow(
-        model_id="o4-mini",
-        session_id="test_loop_session"
-    )
-    
-    print("Testing Loop Excel Processing Workflow...")
-    result = await loop_workflow.arun(base64_excel)
-    print(f"Loop workflow result: {result}")
-    
-    # Example 2: Process Excel file directly with chunking
-    excel_file_path = "tmp/input_excel_test.xlsx"
-    if os.path.exists(excel_file_path):
-        result = await process_excel_file_complete(
-            excel_file_path=excel_file_path,
-            chunk_size=100,
-            model_id="o4-mini",
-            session_id="test_session_direct"
-        )
-        
-        print(f"\nDirect file processing complete!")
-        print(f"Valuable keywords found: {result.valuable_keywords_found}")
-        print(f"Processed chunks: {result.processed_chunks}")
-        print(f"Output saved to: {result.output_path}")
-    
-    # Example 3: Demonstrate chunking functionality
-    print(f"\nDemonstrating chunking functionality:")
-    reset_excel_position()
-    
-    if os.path.exists(excel_file_path):
-        chunk_count = 0
-        while True:
-            chunk_df, start_row, end_row = read_excel_chunk_with_calamine(excel_file_path, chunk_size=100)
-            
-            if chunk_df.empty:
-                break
-            
-            chunk_count += 1
-            print(f"Chunk {chunk_count}: rows {start_row + 1} to {end_row}, keywords: {len(chunk_df)}")
-            
-            if chunk_count >= 3:  # Only show first 3 chunks for demo
-                break
-        
-        print(f"Total chunks available: {chunk_count}")
-        print(f"Final position: {get_current_excel_position()}")
-    
-    # Example 4: Test playground loop workflow
-    playground_workflow = create_playground_loop_excel_workflow(
-        model_id="o4-mini",
-        session_id="test_playground_loop"
-    )
-    
-    print("\nTesting Playground Loop Excel Processing Workflow...")
-    playground_result = await playground_workflow.arun(base64_excel)
-    print(f"Playground loop workflow result: {playground_result}")
+    workflow = create_loop_excel_workflow()
+    await workflow.run()
 
 
 if __name__ == "__main__":
