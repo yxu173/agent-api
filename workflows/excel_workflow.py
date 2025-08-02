@@ -12,7 +12,441 @@ from agno.models.openai import OpenAIChat
 from agno.storage.sqlite import SqliteStorage
 from agno.workflow.v2.types import StepInput, StepOutput
 from agno.workflow.v2.workflow import Workflow
+from agno.workflow.v2 import Loop
 from pydantic import BaseModel, Field
+
+# Global variable to track current row position in Excel files
+current_row_position = 0
+
+
+def read_excel_chunk_with_calamine(filename: str, chunk_size: int = 100, reset_position: bool = False) -> tuple[pd.DataFrame, int, int]:
+    """
+    Read Excel file using CalamineWorkbook and return a chunk of rows from the CATEGORY sheet
+    
+    Args:
+        filename (str): Path to Excel file
+        chunk_size (int): Number of rows to read per chunk (default: 100)
+        reset_position (bool): Whether to reset the global position counter (default: False)
+    
+    Returns:
+        tuple: (DataFrame chunk, start_row, end_row)
+    """
+    global current_row_position
+    
+    if reset_position:
+        current_row_position = 0
+    
+    try:
+        # Try to read the Excel file with CalamineWorkbook
+        print(f"Reading Excel file with CalamineWorkbook: {filename}")
+        try:
+            from python_calamine import CalamineWorkbook
+            workbook = CalamineWorkbook.from_path(filename)
+            
+            # Check if CATEGORY sheet exists
+            sheet_names = workbook.sheet_names
+            print(f"Available sheets: {sheet_names}")
+            
+            if "CATEGORY" not in sheet_names:
+                print("CATEGORY sheet not found, trying first available sheet...")
+                sheet_name = sheet_names[0] if sheet_names else "Sheet1"
+            else:
+                sheet_name = "CATEGORY"
+            
+            print(f"Reading sheet: {sheet_name}")
+            sheet_data = workbook.get_sheet_by_name(sheet_name).to_python()
+            
+            # Convert to DataFrame
+            if sheet_data:
+                # Use first row as headers
+                headers = sheet_data[0]
+                data = sheet_data[1:]  # Skip header row
+                df = pd.DataFrame(data, columns=headers)
+            else:
+                df = pd.DataFrame()
+                
+        except ImportError:
+            print("CalamineWorkbook not available, trying pandas with calamine engine...")
+            try:
+                df = pd.read_excel(filename, engine='calamine', sheet_name="CATEGORY")
+            except:
+                print("Calamine engine failed, trying default engine...")
+                df = pd.read_excel(filename, sheet_name="CATEGORY")
+        except Exception as e:
+            print(f"CalamineWorkbook failed: {e}, trying pandas with calamine engine...")
+            try:
+                df = pd.read_excel(filename, engine='calamine', sheet_name="CATEGORY")
+            except:
+                print("Calamine engine failed, trying default engine...")
+                df = pd.read_excel(filename, sheet_name="CATEGORY")
+        
+        total_rows = len(df)
+        print(f"Total rows in CATEGORY sheet: {total_rows}")
+        print(f"Columns: {list(df.columns)}")
+        
+        # Check if we've reached the end of the file
+        if current_row_position >= total_rows:
+            print("Reached end of file")
+            return pd.DataFrame(), current_row_position, total_rows
+        
+        # Calculate the end row for this chunk
+        end_row = min(current_row_position + chunk_size, total_rows)
+        
+        # Extract the chunk
+        chunk_df = df.iloc[current_row_position:end_row].copy()
+        
+        # Update the global position
+        start_row = current_row_position
+        current_row_position = end_row
+        
+        print(f"Read chunk: rows {start_row + 1} to {end_row} (chunk size: {len(chunk_df)})")
+        
+        return chunk_df, start_row, end_row
+        
+    except Exception as e:
+        print(f"Error reading Excel file: {str(e)}")
+        # Try fallback to default pandas engine
+        try:
+            print("Trying fallback to default pandas engine...")
+            df = pd.read_excel(filename, sheet_name="CATEGORY")
+            
+            total_rows = len(df)
+            print(f"Total rows in CATEGORY sheet: {total_rows}")
+            
+            if current_row_position >= total_rows:
+                print("Reached end of file")
+                return pd.DataFrame(), current_row_position, total_rows
+            
+            end_row = min(current_row_position + chunk_size, total_rows)
+            chunk_df = df.iloc[current_row_position:end_row].copy()
+            
+            start_row = current_row_position
+            current_row_position = end_row
+            
+            print(f"Read chunk with fallback: rows {start_row + 1} to {end_row} (chunk size: {len(chunk_df)})")
+            
+            return chunk_df, start_row, end_row
+            
+        except Exception as fallback_error:
+            print(f"Fallback also failed: {str(fallback_error)}")
+            raise Exception(f"Failed to read Excel file CATEGORY sheet: {str(e)}")
+
+
+def reset_excel_position():
+    """Reset the global Excel row position counter."""
+    global current_row_position
+    current_row_position = 0
+    print("Reset Excel position counter to 0")
+
+
+def get_current_excel_position() -> int:
+    """Get the current Excel row position."""
+    global current_row_position
+    return current_row_position
+
+
+def has_more_chunks(excel_file_path: str) -> bool:
+    """Check if there are more chunks available in the Excel file CATEGORY sheet."""
+    try:
+        # Try CalamineWorkbook first, then fallback to pandas
+        try:
+            from python_calamine import CalamineWorkbook
+            workbook = CalamineWorkbook.from_path(excel_file_path)
+            
+            # Check if CATEGORY sheet exists
+            sheet_names = workbook.sheet_names
+            if "CATEGORY" not in sheet_names:
+                sheet_name = sheet_names[0] if sheet_names else "Sheet1"
+            else:
+                sheet_name = "CATEGORY"
+            
+            sheet_data = workbook.get_sheet_by_name(sheet_name).to_python()
+            
+            # Convert to DataFrame
+            if sheet_data:
+                # Use first row as headers
+                headers = sheet_data[0]
+                data = sheet_data[1:]  # Skip header row
+                df = pd.DataFrame(data, columns=headers)
+            else:
+                df = pd.DataFrame()
+                
+        except ImportError:
+            print("CalamineWorkbook not available, using pandas with calamine engine...")
+            try:
+                df = pd.read_excel(excel_file_path, engine='calamine', sheet_name="CATEGORY")
+            except:
+                print("Calamine engine failed, using default engine...")
+                df = pd.read_excel(excel_file_path, sheet_name="CATEGORY")
+        except Exception as e:
+            print(f"CalamineWorkbook failed: {e}, using pandas with calamine engine...")
+            try:
+                df = pd.read_excel(excel_file_path, engine='calamine', sheet_name="CATEGORY")
+            except:
+                print("Calamine engine failed, using default engine...")
+                df = pd.read_excel(excel_file_path, sheet_name="CATEGORY")
+        
+        total_rows = len(df)
+        current_pos = get_current_excel_position()
+        
+        return current_pos < total_rows
+    except Exception as e:
+        print(f"Error checking for more chunks: {e}")
+        return False
+
+
+def get_excel_file_info(excel_file_path: str) -> dict:
+    """Get information about the Excel file CATEGORY sheet."""
+    try:
+        # Try CalamineWorkbook first, then fallback to pandas
+        try:
+            from python_calamine import CalamineWorkbook
+            workbook = CalamineWorkbook.from_path(excel_file_path)
+            
+            # Check if CATEGORY sheet exists
+            sheet_names = workbook.sheet_names
+            print(f"Available sheets: {sheet_names}")
+            
+            if "CATEGORY" not in sheet_names:
+                print("CATEGORY sheet not found, using first available sheet...")
+                sheet_name = sheet_names[0] if sheet_names else "Sheet1"
+            else:
+                sheet_name = "CATEGORY"
+            
+            print(f"Reading sheet: {sheet_name}")
+            sheet_data = workbook.get_sheet_by_name(sheet_name).to_python()
+            
+            # Convert to DataFrame
+            if sheet_data:
+                # Use first row as headers
+                headers = sheet_data[0]
+                data = sheet_data[1:]  # Skip header row
+                df = pd.DataFrame(data, columns=headers)
+            else:
+                df = pd.DataFrame()
+                
+        except ImportError:
+            print("CalamineWorkbook not available, using pandas with calamine engine...")
+            try:
+                df = pd.read_excel(excel_file_path, engine='calamine', sheet_name="CATEGORY")
+            except:
+                print("Calamine engine failed, using default engine...")
+                df = pd.read_excel(excel_file_path, sheet_name="CATEGORY")
+        except Exception as e:
+            print(f"CalamineWorkbook failed: {e}, using pandas with calamine engine...")
+            try:
+                df = pd.read_excel(excel_file_path, engine='calamine', sheet_name="CATEGORY")
+            except:
+                print("Calamine engine failed, using default engine...")
+                df = pd.read_excel(excel_file_path, sheet_name="CATEGORY")
+        
+        return {
+            'total_rows': len(df),
+            'total_columns': len(df.columns),
+            'column_names': list(df.columns),
+            'current_position': get_current_excel_position(),
+            'remaining_rows': len(df) - get_current_excel_position()
+        }
+    except Exception as e:
+        print(f"Error getting Excel file info: {e}")
+        return {}
+
+
+def process_excel_chunk_step(step_input: StepInput) -> StepOutput:
+    """Process a single chunk of Excel data (100 rows) and send to AI agent."""
+    try:
+        # Get the Excel file path from workflow state or use default
+        session_id = 'default'
+        if hasattr(step_input, 'workflow_session_state') and step_input.workflow_session_state:
+            session_id = step_input.workflow_session_state.get('session_id', 'default')
+        
+        excel_file_path = f"tmp/input_excel_{session_id}.xlsx"
+        
+        if not os.path.exists(excel_file_path):
+            return StepOutput(
+                content="Error: Excel file not found. Please ensure the file was created successfully."
+            )
+        
+        # Read next chunk of 100 rows
+        chunk_df, start_row, end_row = read_excel_chunk_with_calamine(excel_file_path, chunk_size=100)
+        
+        if chunk_df.empty:
+            return StepOutput(
+                content="END_OF_FILE: No more rows to process"
+            )
+        
+        print(f"Processing chunk: rows {start_row + 1} to {end_row} ({len(chunk_df)} rows)")
+        
+        # Find keyword and category columns
+        keyword_column = None
+        category_column = None
+        
+        for col in chunk_df.columns:
+            col_lower = str(col).lower()
+            if any(keyword in col_lower for keyword in ['keyword', 'term', 'phrase', 'word']):
+                keyword_column = col
+            elif any(cat in col_lower for cat in ['category', 'type', 'class', 'group']):
+                category_column = col
+        
+        if not keyword_column:
+            keyword_column = chunk_df.columns[0]
+        
+        if not category_column:
+            category_column = 'category'
+            chunk_df[category_column] = 'general'
+        
+        # Extract keywords
+        keywords_with_category = []
+        for _, row in chunk_df.iterrows():
+            keyword = str(row[keyword_column]).strip()
+            category = str(row[category_column]).strip()
+            if keyword and keyword.lower() not in ['nan', 'none', '']:
+                keywords_with_category.append({
+                    'keyword': keyword,
+                    'category': category
+                })
+        
+        if not keywords_with_category:
+            return StepOutput(
+                content=f"SKIP_CHUNK: No valid keywords found in rows {start_row + 1} to {end_row}"
+            )
+        
+        # Prepare message for AI agent
+        keywords_text = f"Please analyze the following keywords from the Excel file (rows {start_row + 1} to {end_row}):\n\n"
+        for item in keywords_with_category:
+            keywords_text += f"- Keyword: {item['keyword']}, Category: {item['category']}\n"
+        
+        return StepOutput(
+            content=keywords_text
+        )
+        
+    except Exception as e:
+        print(f"Error in process_excel_chunk_step: {e}")
+        return StepOutput(
+            content=f"Error processing Excel chunk: {str(e)}"
+        )
+
+
+def save_chunk_results_step(step_input: StepInput) -> StepOutput:
+    """Save AI agent results to session Excel file."""
+    try:
+        analysis_result = step_input.previous_step_content
+        
+        if isinstance(analysis_result, str) and analysis_result.startswith("END_OF_FILE"):
+            return StepOutput(
+                content="Processing complete: Reached end of file"
+            )
+        
+        if isinstance(analysis_result, str) and analysis_result.startswith("SKIP_CHUNK"):
+            return StepOutput(
+                content=f"Skipped chunk: {analysis_result}"
+            )
+        
+        if hasattr(analysis_result, 'valuable_keywords'):
+            valuable_keywords = analysis_result.valuable_keywords
+        else:
+            valuable_keywords = []
+        
+        keywords_data = []
+        for keyword_eval in valuable_keywords:
+            keywords_data.append({
+                'keyword': keyword_eval.keyword,
+                'reason': keyword_eval.reason
+            })
+        
+        # Get session ID from workflow session state or use default
+        session_id = 'default'
+        if hasattr(step_input, 'workflow_session_state') and step_input.workflow_session_state:
+            session_id = step_input.workflow_session_state.get('session_id', 'default')
+        
+        session_excel_file = f"tmp/session_keywords_{session_id}.xlsx"
+        
+        # Load existing results
+        existing_keywords = []
+        if os.path.exists(session_excel_file):
+            try:
+                existing_df = pd.read_excel(session_excel_file)
+                existing_keywords = existing_df.to_dict('records')
+            except:
+                existing_keywords = []
+        
+        # Add new keywords
+        existing_keywords.extend(keywords_data)
+        
+        # Save updated results
+        if existing_keywords:
+            df = pd.DataFrame(existing_keywords)
+            df.to_excel(session_excel_file, index=False)
+        
+        current_pos = get_current_excel_position()
+        excel_file_path = f"tmp/input_excel_{session_id}.xlsx"
+        
+        if os.path.exists(excel_file_path):
+            file_info = get_excel_file_info(excel_file_path)
+            total_rows = file_info.get('total_rows', 0)
+            
+            if total_rows > 0:
+                progress_percentage = (current_pos / total_rows) * 100
+                remaining_chunks = (file_info.get('remaining_rows', 0) + 99) // 100
+                
+                progress_message = f"Chunk processed: {len(keywords_data)} valuable keywords found. "
+                progress_message += f"Total accumulated: {len(existing_keywords)} keywords. "
+                progress_message += f"Progress: {progress_percentage:.1f}% ({current_pos}/{total_rows} rows). "
+                progress_message += f"Remaining chunks: {remaining_chunks}. "
+                progress_message += f"File: {session_excel_file}"
+                
+                return StepOutput(
+                    content=progress_message
+                )
+        
+        return StepOutput(
+            content=f"Chunk processed: {len(keywords_data)} valuable keywords found. Total accumulated: {len(existing_keywords)} keywords. File: {session_excel_file}"
+        )
+        
+    except Exception as e:
+        print(f"Error in save_chunk_results_step: {e}")
+        return StepOutput(
+            content=f"Error saving chunk results: {str(e)}"
+        )
+
+
+def excel_loop_end_condition(outputs: List[StepOutput]) -> bool:
+    """
+    End condition for Excel processing loop.
+    Returns True to break the loop (end of file), False to continue.
+    """
+    if not outputs:
+        return False
+    
+    # Check the last output to see if we've reached the end of file
+    last_output = outputs[-1]
+    
+    if isinstance(last_output.content, str):
+        if last_output.content.startswith("END_OF_FILE"):
+            print("✅ Excel processing complete - reached end of file")
+            return True
+        elif last_output.content.startswith("Processing complete"):
+            print("✅ Excel processing complete - all chunks processed")
+            return True
+    
+    # Check if we have substantial results
+    if len(outputs) > 0:
+        # Count total keywords processed
+        total_keywords = 0
+        for output in outputs:
+            if "valuable keywords found" in str(output.content):
+                # Extract number from message like "5 valuable keywords found"
+                import re
+                match = re.search(r'(\d+) valuable keywords found', str(output.content))
+                if match:
+                    total_keywords += int(match.group(1))
+        
+        if total_keywords > 0:
+            print(f"✅ Excel processing continuing - processed {total_keywords} keywords so far")
+            return False
+    
+    print("❌ Excel processing continuing - need more chunks")
+    return False
 
 
 class KeywordEvaluation(BaseModel):
@@ -108,218 +542,247 @@ def create_excel_analysis_agent(
 
 def base64_to_excel_step(step_input: StepInput) -> StepOutput:
     """Convert base64 string to Excel file or handle direct keywords."""
-    input_message = step_input.message
-    print(f"DEBUG: Received input of length: {len(input_message)}")
-    
-    # Clean up the input message - remove timestamps and extra formatting
-    cleaned_message = clean_base64_input(input_message)
-    print(f"DEBUG: Cleaned input length: {len(cleaned_message)}")
-    
-    # Check if input looks like base64 (contains only base64 characters and is longer than typical keywords)
-    import re
-    base64_pattern = re.compile(r'^[A-Za-z0-9+/]*={0,2}$')
-    
-    # If input looks like base64 and is longer than 100 characters, treat as base64
-    if len(cleaned_message) > 100 and base64_pattern.match(cleaned_message.strip()):
-        print(f"DEBUG: Input appears to be base64, length: {len(cleaned_message)}")
+    try:
+        base64_string = step_input.message
         
-        # Create temporary file path with default session
+        if not base64_string:
+            return StepOutput(
+                content="Error: No base64 string provided. Please provide a valid base64 encoded Excel file."
+            )
+        
+        base64_string = base64_string.strip().replace('\n', '').replace('\r', '')
+        
+        if not base64_string:
+            return StepOutput(
+                content="Error: Empty base64 string after cleaning. Please provide a valid base64 encoded Excel file."
+            )
+        
+        # Validate base64 string format
+        try:
+            import re
+            if not re.match(r'^[A-Za-z0-9+/]*={0,2}$', base64_string):
+                return StepOutput(
+                    content="Error: Invalid base64 string format. Please provide a properly encoded base64 string."
+                )
+        except Exception as e:
+            return StepOutput(
+                content=f"Error: Failed to validate base64 string format: {str(e)}"
+            )
+        
+        # Decode base64 to bytes
+        try:
+            excel_bytes = base64.b64decode(base64_string)
+        except Exception as e:
+            return StepOutput(
+                content=f"Error: Failed to decode base64 string: {str(e)}. Please ensure the base64 string is valid and complete."
+            )
+        
+        if not excel_bytes:
+            return StepOutput(
+                content="Error: Decoded base64 string is empty. Please provide a valid Excel file."
+            )
+        
+        # Validate that it's actually an Excel file by checking file signature
+        try:
+            # Excel files start with specific byte patterns
+            excel_signatures = [
+                b'\x50\x4B\x03\x04',  # .xlsx files (ZIP format)
+                b'\xD0\xCF\x11\xE0',  # .xls files (OLE format)
+                b'\x09\x08\x10\x00',  # .xls files (BIFF format)
+            ]
+            
+            is_excel_file = any(excel_bytes.startswith(sig) for sig in excel_signatures)
+            if not is_excel_file:
+                return StepOutput(
+                    content="Error: The decoded data does not appear to be a valid Excel file. Please ensure you're providing a base64 encoded Excel file (.xlsx or .xls)."
+                )
+        except Exception as e:
+            # If signature validation fails, continue but log the issue
+            print(f"Warning: Could not validate Excel file signature: {e}")
+        
+        # Get session ID from workflow session state or generate one
         session_id = 'default'
+        if hasattr(step_input, 'workflow_session_state') and step_input.workflow_session_state:
+            session_id = step_input.workflow_session_state.get('session_id', 'default')
+        
+        # Create file path
         excel_file_path = f"tmp/input_excel_{session_id}.xlsx"
         
         # Ensure tmp directory exists
-        os.makedirs("tmp", exist_ok=True)
-        
         try:
-            # Decode base64 string
-            excel_data = base64.b64decode(cleaned_message)
-            print(f"DEBUG: Decoded base64 to {len(excel_data)} bytes")
-            
-            # Save to file
+            os.makedirs("tmp", exist_ok=True)
+        except Exception as e:
+            return StepOutput(
+                content=f"Error: Failed to create temporary directory: {str(e)}"
+            )
+        
+        # Write the Excel file
+        try:
             with open(excel_file_path, 'wb') as f:
-                f.write(excel_data)
-            
-            print(f"DEBUG: Saved Excel file to: {excel_file_path}")
-            
-            return StepOutput(
-                content=f"EXCEL_FILE_PATH:{excel_file_path}"
-            )
+                f.write(excel_bytes)
         except Exception as e:
-            print(f"DEBUG: Error converting base64 to Excel file: {e}")
             return StepOutput(
-                content=f"Error converting base64 to Excel file: {e}"
+                content=f"Error: Failed to write Excel file to disk: {str(e)}"
             )
-    else:
-        # Input appears to be direct keywords, create a simple Excel file
-        print(f"DEBUG: Input appears to be direct keywords, creating Excel file")
         
-        # Create temporary file path with default session
-        session_id = 'default'
-        excel_file_path = f"tmp/input_excel_{session_id}.xlsx"
-        
-        # Ensure tmp directory exists
-        os.makedirs("tmp", exist_ok=True)
-        
-        try:
-            # Parse the keywords from the input
-            lines = cleaned_message.strip().split('\n')
-            keywords_data = []
-            
-            for line in lines:
-                line = line.strip()
-                if line and not line.startswith('Keyword\tRelevance\tCategory'):
-                    # Split by tab or comma
-                    parts = line.split('\t') if '\t' in line else line.split(',')
-                    if len(parts) >= 1:
-                        keyword = parts[0].strip()
-                        category = parts[2].strip() if len(parts) >= 3 else 'general'
-                        if keyword and keyword.lower() not in ['nan', 'none', '']:
-                            keywords_data.append({
-                                'keyword': keyword,
-                                'category': category
-                            })
-            
-            if keywords_data:
-                # Create DataFrame and save to Excel
-                df = pd.DataFrame(keywords_data)
-                df.to_excel(excel_file_path, index=False)
-                print(f"DEBUG: Created Excel file with {len(keywords_data)} keywords")
-                
-                return StepOutput(
-                    content=f"EXCEL_FILE_PATH:{excel_file_path}"
-                )
-            else:
-                print(f"DEBUG: No valid keywords found in direct input")
-                return StepOutput(
-                    content="No valid keywords found in the input. Please provide keywords in the format: 'keyword\tcategory' or as a base64 encoded Excel file."
-                )
-                
-        except Exception as e:
-            print(f"DEBUG: Error creating Excel file from direct input: {e}")
+        # Verify the file was written successfully
+        if not os.path.exists(excel_file_path):
             return StepOutput(
-                content=f"Error creating Excel file from direct input: {e}"
+                content="Error: Excel file was not created successfully. Please try again."
             )
-
-
-def clean_base64_input(input_text: str) -> str:
-    """Clean base64 input by removing timestamps and extra formatting."""
-    lines = input_text.strip().split('\n')
-    cleaned_lines = []
+        
+        file_size = os.path.getsize(excel_file_path)
+        if file_size == 0:
+            return StepOutput(
+                content="Error: Created Excel file is empty. Please check the original file."
+            )
+        
+        # Reset the global position counter for new file processing
+        reset_excel_position()
+        print(f"DEBUG: Reset Excel position counter for new file: {excel_file_path}")
+        
+        return StepOutput(
+            content=f"EXCEL_FILE_PATH:{excel_file_path}"
+        )
+        
+    except Exception as e:
+        return StepOutput(
+            content=f"Error: Unexpected error during base64 to Excel conversion: {str(e)}"
+        )
+        
     
-    for line in lines:
-        line = line.strip()
-        # Skip empty lines
-        if not line:
-            continue
-        
-        # Skip timestamp lines (lines that start with date/time pattern)
-        if re.match(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', line):
-            continue
-        
-        # Skip lines that are just whitespace or formatting
-        if re.match(r'^\s*$', line):
-            continue
-        
-        # Extract base64 content from lines that might have extra formatting
-        # Look for base64 characters in the line
-        base64_chars = re.findall(r'[A-Za-z0-9+/=]+', line)
-        if base64_chars:
-            # Join all base64 parts found in the line
-            cleaned_lines.append(''.join(base64_chars))
-    
-    # Join all cleaned lines
-    return ''.join(cleaned_lines)
 
 
 def prepare_excel_chunk_step(step_input: StepInput) -> StepOutput:
     """Prepare Excel chunk data for keyword analysis."""
-    # Extract file path from previous step's message
-    message = step_input.message
-    print(f"DEBUG: prepare_excel_chunk_step received message: {message[:100]}...")
-    
-    if message.startswith("EXCEL_FILE_PATH:"):
-        excel_file_path = message.split(":", 1)[1]
-        print(f"DEBUG: Extracted Excel file path: {excel_file_path}")
-    else:
-        print(f"DEBUG: Message does not start with EXCEL_FILE_PATH: {message[:100]}...")
-        return StepOutput(
-            content="Error: No Excel file path received from previous step"
-        )
-    
-    session_id = 'default'
-    
     try:
-        df = pd.read_excel(excel_file_path)
-        print(f"DEBUG: Excel file loaded with {len(df)} rows and columns: {list(df.columns)}")
+        # Extract file path from previous step's message
+        message = step_input.previous_step_content
+        print(f"DEBUG: prepare_excel_chunk_step received message: {message[:100]}...")
         
-        keyword_column = None
-        category_column = None
-        
-        for col in df.columns:
-            col_lower = col.lower()
-            if any(keyword in col_lower for keyword in ['keyword', 'term', 'phrase', 'word']):
-                keyword_column = col
-            elif any(cat in col_lower for cat in ['category', 'type', 'class', 'group']):
-                category_column = col
-        
-        if not keyword_column:
-            keyword_column = df.columns[0]
-        
-        if not category_column:
-            category_column = 'category'
-            df[category_column] = 'general'
-        
-        print(f"DEBUG: Using keyword column: '{keyword_column}', category column: '{category_column}'")
-        
-        keywords_with_category = []
-        for _, row in df.iterrows():
-            keyword = str(row[keyword_column]).strip()
-            category = str(row[category_column]).strip()
-            if keyword and keyword.lower() not in ['nan', 'none', '']:
-                keywords_with_category.append({
-                    'keyword': keyword,
-                    'category': category
-                })
-        
-        print(f"DEBUG: Extracted {len(keywords_with_category)} valid keywords")
-        
-        if keywords_with_category:
-            keywords_text = "Please analyze the following keywords from the Excel file:\n\n"
-            for item in keywords_with_category:
-                keywords_text += f"- Keyword: {item['keyword']}, Category: {item['category']}\n"
-            
-            print(f"DEBUG: Sending to AI agent: {keywords_text[:200]}...")
-            print(f"DEBUG: Total keywords to analyze: {len(keywords_with_category)}")
-            print(f"DEBUG: First few keywords: {keywords_with_category[:3]}")
-            
+        if not message:
             return StepOutput(
-                content=keywords_text
+                content="Error: No message received from previous step."
             )
+        
+        if message.startswith("EXCEL_FILE_PATH:"):
+            excel_file_path = message.split(":", 1)[1].strip()
+            print(f"DEBUG: Extracted Excel file path: {excel_file_path}")
         else:
-            print("DEBUG: No valid keywords found in Excel file")
+            print(f"DEBUG: Message does not start with EXCEL_FILE_PATH: {message[:100]}...")
             return StepOutput(
-                content="No keywords found in the Excel file. Please ensure the file contains valid keyword data in the expected format."
+                content="Error: No Excel file path received from previous step. Expected message starting with 'EXCEL_FILE_PATH:'"
             )
         
+        if not excel_file_path:
+            return StepOutput(
+                content="Error: Empty Excel file path received from previous step."
+            )
+        
+        if not os.path.exists(excel_file_path):
+            return StepOutput(
+                content=f"Error: Excel file not found at path: {excel_file_path}"
+            )
+        
+        if not os.access(excel_file_path, os.R_OK):
+            return StepOutput(
+                content=f"Error: Excel file is not readable: {excel_file_path}"
+            )
+        
+        file_size = os.path.getsize(excel_file_path)
+        if file_size == 0:
+            return StepOutput(
+                content=f"Error: Excel file is empty: {excel_file_path}"
+            )
+        
+        session_id = 'default'
+        
+        try:
+            chunk_df, start_row, end_row = read_excel_chunk_with_calamine(excel_file_path, chunk_size=100)
+            
+            if chunk_df.empty:
+                return StepOutput(
+                    content="Reached end of Excel file. All chunks have been processed."
+                )
+            
+            print(f"DEBUG: Excel chunk loaded with {len(chunk_df)} rows and columns: {list(chunk_df.columns)}")
+            print(f"DEBUG: Processing rows {start_row + 1} to {end_row}")
+            
+            keyword_column = None
+            category_column = None
+            
+            # Find keyword and category columns
+            for col in chunk_df.columns:
+                col_lower = str(col).lower()
+                if any(keyword in col_lower for keyword in ['keyword', 'term', 'phrase', 'word']):
+                    keyword_column = col
+                elif any(cat in col_lower for cat in ['category', 'type', 'class', 'group']):
+                    category_column = col
+            
+            if not keyword_column:
+                keyword_column = chunk_df.columns[0]
+                print(f"DEBUG: No keyword column found, using first column: {keyword_column}")
+            
+            if not category_column:
+                category_column = 'category'
+                chunk_df[category_column] = 'general'
+                print(f"DEBUG: No category column found, using default 'general' category")
+            
+            print(f"DEBUG: Using keyword column: '{keyword_column}', category column: '{category_column}'")
+            
+            keywords_with_category = []
+            invalid_rows = []
+            
+            for idx, row in chunk_df.iterrows():
+                try:
+                    keyword = str(row[keyword_column]).strip()
+                    category = str(row[category_column]).strip()
+                    
+                    # Skip empty or invalid keywords
+                    if keyword and keyword.lower() not in ['nan', 'none', '']:
+                        keywords_with_category.append({
+                            'keyword': keyword,
+                            'category': category
+                        })
+                    else:
+                        invalid_rows.append(idx + 1)  # +1 for 1-based row numbers
+                except Exception as e:
+                    print(f"DEBUG: Error processing row {idx + 1}: {e}")
+                    invalid_rows.append(idx + 1)
+            
+            print(f"DEBUG: Extracted {len(keywords_with_category)} valid keywords from chunk")
+            if invalid_rows:
+                print(f"DEBUG: Skipped {len(invalid_rows)} invalid rows: {invalid_rows[:10]}...")
+            
+            if keywords_with_category:
+                keywords_text = f"Please analyze the following keywords from the Excel file (rows {start_row + 1} to {end_row}):\n\n"
+                for item in keywords_with_category:
+                    keywords_text += f"- Keyword: {item['keyword']}, Category: {item['category']}\n"
+                
+                print(f"DEBUG: Sending to AI agent: {keywords_text[:200]}...")
+                print(f"DEBUG: Total keywords to analyze: {len(keywords_with_category)}")
+                print(f"DEBUG: First few keywords: {keywords_with_category[:3]}")
+                
+                return StepOutput(
+                    content=keywords_text
+                )
+            else:
+                print("DEBUG: No valid keywords found in Excel chunk")
+                return StepOutput(
+                    content=f"No valid keywords found in Excel chunk (rows {start_row + 1} to {end_row}). Please ensure the file contains valid keyword data in the expected format. Check that the keyword column contains non-empty values."
+                )
+            
+        except Exception as e:
+            print(f"DEBUG: Error in prepare_excel_chunk_step: {e}")
+            return StepOutput(
+                content=f"Error preparing Excel chunk: {str(e)}"
+            )
+            
     except Exception as e:
-        print(f"DEBUG: Error in prepare_excel_chunk_step: {e}")
+        print(f"DEBUG: Unexpected error in prepare_excel_chunk_step: {e}")
         return StepOutput(
-            content=f"Error preparing Excel chunk: {e}"
+            content=f"Error: Unexpected error during Excel preparation: {str(e)}"
         )
-
-
-def debug_agent_input_step(step_input: StepInput) -> StepOutput:
-    """Debug step to see what the agent receives."""
-    print(f"DEBUG: Agent input step received message: {step_input.message[:500]}...")
-    print(f"DEBUG: Agent input step message length: {len(step_input.message)}")
-    
-    if step_input.message.startswith("Error:") or step_input.message.startswith("No keywords") or step_input.message.startswith("No valid keywords"):
-        print(f"DEBUG: Detected error message, skipping AI agent")
-        return StepOutput(
-            content="The input could not be processed. Please ensure you provide either:\n1. A base64 encoded Excel file with keywords\n2. Direct keywords in the format: 'keyword\tcategory'"
-        )
-    
-    return StepOutput(content=step_input.message)
 
 
 def accumulate_analysis_results(step_input: StepInput) -> StepOutput:
@@ -330,8 +793,9 @@ def accumulate_analysis_results(step_input: StepInput) -> StepOutput:
     
     if isinstance(analysis_result, str) and (analysis_result.startswith("The input could not be processed") or 
                                             analysis_result.startswith("No keywords") or 
-                                            analysis_result.startswith("No valid keywords")):
-        print(f"DEBUG: Received error message, not processing analysis results")
+                                            analysis_result.startswith("No valid keywords") or
+                                            analysis_result.startswith("Reached end of Excel file")):
+        print(f"DEBUG: Received error message or end of file, not processing analysis results")
         return StepOutput(
             content=analysis_result
         )
@@ -339,10 +803,8 @@ def accumulate_analysis_results(step_input: StepInput) -> StepOutput:
     if hasattr(analysis_result, 'valuable_keywords'):
         valuable_keywords = analysis_result.valuable_keywords
     else:
-        # Handle case where the result might be a string or other format
         valuable_keywords = []
     
-    # Convert to list of dictionaries for Excel storage
     keywords_data = []
     for keyword_eval in valuable_keywords:
         keywords_data.append({
@@ -376,17 +838,41 @@ def accumulate_analysis_results(step_input: StepInput) -> StepOutput:
         df = pd.DataFrame(existing_keywords)
         df.to_excel(session_excel_file, index=False)
     
-    return StepOutput(
-        content=f"Successfully processed {len(keywords_data)} valuable keywords from this chunk. Total accumulated in session: {len(existing_keywords)} keywords. File: {session_excel_file}"
-    )
+    # Get current position and file info for progress tracking
+    current_pos = get_current_excel_position()
+    excel_file_path = f"tmp/input_excel_{session_id}.xlsx"
+    
+    if os.path.exists(excel_file_path):
+        file_info = get_excel_file_info(excel_file_path)
+        remaining_chunks = (file_info.get('remaining_rows', 0) + 99) // 100  # Calculate remaining chunks
+        
+        progress_message = f"Successfully processed {len(keywords_data)} valuable keywords from this chunk. "
+        progress_message += f"Total accumulated in session: {len(existing_keywords)} keywords. "
+        progress_message += f"Current position: row {current_pos + 1}. "
+        
+        if file_info.get('total_rows', 0) > 0:
+            progress_percentage = (current_pos / file_info['total_rows']) * 100
+            progress_message += f"Progress: {progress_percentage:.1f}% ({current_pos}/{file_info['total_rows']} rows). "
+            progress_message += f"Remaining chunks: {remaining_chunks}. "
+        
+        progress_message += f"File: {session_excel_file}"
+        
+        return StepOutput(
+            content=progress_message
+        )
+    else:
+        return StepOutput(
+            content=f"Successfully processed {len(keywords_data)} valuable keywords from this chunk. Total accumulated in session: {len(existing_keywords)} keywords. File: {session_excel_file}"
+        )
 
 
 def save_session_results(step_input: StepInput) -> StepOutput:
     """Finalize the session Excel file and provide download link."""
-    # Get session ID from the workflow context
+    
+    # Get session ID from workflow session state or use default
     session_id = 'default'
-    if hasattr(step_input, 'workflow_state') and step_input.workflow_state:
-        session_id = step_input.workflow_state.get('session_id', 'default')
+    if hasattr(step_input, 'workflow_session_state') and step_input.workflow_session_state:
+        session_id = step_input.workflow_session_state.get('session_id', 'default')
     
     # Check the session Excel file
     session_excel_file = f"tmp/session_keywords_{session_id}.xlsx"
@@ -437,7 +923,6 @@ def create_excel_workflow(
         steps=[
             base64_to_excel_step,
             prepare_excel_chunk_step,
-            debug_agent_input_step,
             analysis_agent,
             accumulate_analysis_results,
             save_session_results,
@@ -475,7 +960,6 @@ def create_playground_excel_workflow(
         steps=[
             base64_to_excel_step,
             prepare_excel_chunk_step,
-            debug_agent_input_step,
             analysis_agent,
             accumulate_analysis_results,
         ],
@@ -512,11 +996,101 @@ def create_session_based_excel_workflow(
         steps=[
             base64_to_excel_step,
             prepare_excel_chunk_step,
-            debug_agent_input_step,
             analysis_agent,
             accumulate_analysis_results,
             save_session_results,
         ],
+    )
+    
+    return workflow
+
+
+def create_loop_excel_workflow(
+    model_id: str = "o4-mini",
+    user_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    debug_mode: bool = True,
+) -> Workflow:
+    """Create a loop-based Excel processing workflow using Agno workflow v2."""
+    
+    # Create the analysis agent
+    analysis_agent = create_excel_analysis_agent(
+        model_id=model_id,
+        user_id=user_id,
+        session_id=session_id,
+        debug_mode=debug_mode
+    )
+    
+    # Initialize workflow session state
+    workflow_session_state = {}
+    if session_id:
+        workflow_session_state['session_id'] = session_id
+    
+    # Create the workflow with loop
+    workflow = Workflow(
+        name="Loop Excel Processing Workflow",
+        description="Process Excel file in chunks of 100 rows using loop execution",
+        storage=SqliteStorage(
+            table_name="excel_loop_workflow",
+            db_file="tmp/excel_loop_workflow.db",
+            mode="workflow_v2",
+        ),
+        steps=[
+            base64_to_excel_step,
+            Loop(
+                name="Excel Processing Loop",
+                steps=[process_excel_chunk_step, analysis_agent, save_chunk_results_step],
+                end_condition=excel_loop_end_condition,
+                max_iterations=8,
+            ),
+            save_session_results,
+        ],
+        workflow_session_state=workflow_session_state,
+    )
+    
+    return workflow
+
+
+def create_playground_loop_excel_workflow(
+    model_id: str = "o4-mini",
+    user_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    debug_mode: bool = True,
+) -> Workflow:
+    """Create a loop-based Excel processing workflow for the playground interface."""
+    
+    # Create the analysis agent
+    analysis_agent = create_excel_analysis_agent(
+        model_id=model_id,
+        user_id=user_id,
+        session_id=session_id,
+        debug_mode=debug_mode
+    )
+    
+    # Initialize workflow session state
+    workflow_session_state = {}
+    if session_id:
+        workflow_session_state['session_id'] = session_id
+    
+    # Create the workflow with loop
+    workflow = Workflow(
+        name="Playground Loop Excel Processing Workflow",
+        description="Process Excel file in chunks of 100 rows using loop execution for playground",
+        storage=SqliteStorage(
+            table_name="excel_playground_loop_workflow",
+            db_file="tmp/excel_playground_loop_workflow.db",
+            mode="workflow_v2",
+        ),
+        steps=[
+            base64_to_excel_step,
+            Loop(
+                name="Excel Processing Loop",
+                steps=[process_excel_chunk_step, analysis_agent, save_chunk_results_step],
+                end_condition=excel_loop_end_condition,
+                max_iterations=1000,
+            ),
+        ],
+        workflow_session_state=workflow_session_state,
     )
     
     return workflow
@@ -573,21 +1147,228 @@ async def process_base64_excel_complete(
         processed_chunks=processed_chunks
     )
 
-async def main():
-    """Example usage of the Excel workflow."""
-    base64_excel = "base64_encoded_excel_file_content_here"
+async def process_excel_file_complete(
+    excel_file_path: str,
+    chunk_size: int = 100,
+    model_id: str = "o4-mini",
+    user_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+) -> ExcelProcessingResult:
+    """
+    Process entire Excel file in chunks automatically.
     
-    result = await process_base64_excel_complete(
-        base64_string=base64_excel,
-        chunk_size=100,
-        model_id="o4-mini",
-        session_id="test_session"
+    Args:
+        excel_file_path: Path to the Excel file
+        chunk_size: Number of rows to process in each chunk
+        model_id: OpenAI model ID to use
+        user_id: User ID for the agent
+        session_id: Session ID for the agent
+    
+    Returns:
+        ExcelProcessingResult with processing information
+    """
+    
+    # Reset position for new file
+    reset_excel_position()
+    
+    # Create the analysis agent
+    analysis_agent = create_excel_analysis_agent(
+        model_id=model_id,
+        user_id=user_id,
+        session_id=session_id,
+        debug_mode=True
     )
     
-    print(f"Processing complete!")
-    print(f"Valuable keywords found: {result.valuable_keywords_found}")
-    print(f"Processed chunks: {result.processed_chunks}")
-    print(f"Output saved to: {result.output_path}")
+    session_id = session_id or 'default'
+    session_excel_file = f"tmp/session_keywords_{session_id}.xlsx"
+    
+    # Remove existing session file if it exists
+    if os.path.exists(session_excel_file):
+        os.remove(session_excel_file)
+    
+    processed_chunks = 0
+    total_keywords_processed = 0
+    
+    try:
+        # Get file info
+        file_info = get_excel_file_info(excel_file_path)
+        total_rows = file_info.get('total_rows', 0)
+        
+        if total_rows == 0:
+            return ExcelProcessingResult(
+                valuable_keywords_found=0,
+                output_path=session_excel_file,
+                processed_chunks=0
+            )
+        
+        print(f"Starting to process Excel file with {total_rows} rows in chunks of {chunk_size}")
+        
+        # Process chunks until end of file
+        while True:
+            # Read next chunk
+            chunk_df, start_row, end_row = read_excel_chunk_with_calamine(excel_file_path, chunk_size=chunk_size)
+            
+            if chunk_df.empty:
+                print("Reached end of file, processing complete")
+                break
+            
+            processed_chunks += 1
+            print(f"Processing chunk {processed_chunks}: rows {start_row + 1} to {end_row}")
+            
+            # Prepare keywords for analysis
+            keyword_column = None
+            category_column = None
+            
+            for col in chunk_df.columns:
+                col_lower = str(col).lower()
+                if any(keyword in col_lower for keyword in ['keyword', 'term', 'phrase', 'word']):
+                    keyword_column = col
+                elif any(cat in col_lower for cat in ['category', 'type', 'class', 'group']):
+                    category_column = col
+            
+            if not keyword_column:
+                keyword_column = chunk_df.columns[0]
+            
+            if not category_column:
+                category_column = 'category'
+                chunk_df[category_column] = 'general'
+            
+            # Extract keywords
+            keywords_with_category = []
+            for _, row in chunk_df.iterrows():
+                keyword = str(row[keyword_column]).strip()
+                category = str(row[category_column]).strip()
+                if keyword and keyword.lower() not in ['nan', 'none', '']:
+                    keywords_with_category.append({
+                        'keyword': keyword,
+                        'category': category
+                    })
+            
+            if keywords_with_category:
+                # Prepare message for AI agent
+                keywords_text = f"Please analyze the following keywords from the Excel file (rows {start_row + 1} to {end_row}):\n\n"
+                for item in keywords_with_category:
+                    keywords_text += f"- Keyword: {item['keyword']}, Category: {item['category']}\n"
+                
+                # Send to AI agent
+                try:
+                    result = await analysis_agent.arun(keywords_text)
+                    
+                    if hasattr(result, 'valuable_keywords'):
+                        valuable_keywords = result.valuable_keywords
+                        total_keywords_processed += len(valuable_keywords)
+                        
+                        # Save to session file
+                        keywords_data = []
+                        for keyword_eval in valuable_keywords:
+                            keywords_data.append({
+                                'keyword': keyword_eval.keyword,
+                                'reason': keyword_eval.reason
+                            })
+                        
+                        # Load existing results
+                        existing_keywords = []
+                        if os.path.exists(session_excel_file):
+                            try:
+                                existing_df = pd.read_excel(session_excel_file)
+                                existing_keywords = existing_df.to_dict('records')
+                            except:
+                                existing_keywords = []
+                        
+                        # Add new keywords
+                        existing_keywords.extend(keywords_data)
+                        
+                        # Save updated results
+                        if existing_keywords:
+                            df = pd.DataFrame(existing_keywords)
+                            df.to_excel(session_excel_file, index=False)
+                        
+                        print(f"Chunk {processed_chunks} processed: {len(valuable_keywords)} valuable keywords found")
+                    else:
+                        print(f"Chunk {processed_chunks} processed: No valuable keywords found")
+                        
+                except Exception as e:
+                    print(f"Error processing chunk {processed_chunks}: {e}")
+                    continue
+            else:
+                print(f"Chunk {processed_chunks}: No valid keywords found")
+        
+        print(f"Processing complete! Processed {processed_chunks} chunks, found {total_keywords_processed} valuable keywords")
+        
+        return ExcelProcessingResult(
+            valuable_keywords_found=total_keywords_processed,
+            output_path=session_excel_file,
+            processed_chunks=processed_chunks
+        )
+        
+    except Exception as e:
+        print(f"Error in process_excel_file_complete: {e}")
+        return ExcelProcessingResult(
+            valuable_keywords_found=total_keywords_processed,
+            output_path=session_excel_file,
+            processed_chunks=processed_chunks
+        )
+
+async def main():
+    """Example usage of the Excel workflow."""
+    # Example 1: Process base64 Excel file with loop workflow
+    base64_excel = "base64_encoded_excel_file_content_here"
+    
+    # Create loop workflow
+    loop_workflow = create_loop_excel_workflow(
+        model_id="o4-mini",
+        session_id="test_loop_session"
+    )
+    
+    print("Testing Loop Excel Processing Workflow...")
+    result = await loop_workflow.arun(base64_excel)
+    print(f"Loop workflow result: {result}")
+    
+    # Example 2: Process Excel file directly with chunking
+    excel_file_path = "tmp/input_excel_test.xlsx"
+    if os.path.exists(excel_file_path):
+        result = await process_excel_file_complete(
+            excel_file_path=excel_file_path,
+            chunk_size=100,
+            model_id="o4-mini",
+            session_id="test_session_direct"
+        )
+        
+        print(f"\nDirect file processing complete!")
+        print(f"Valuable keywords found: {result.valuable_keywords_found}")
+        print(f"Processed chunks: {result.processed_chunks}")
+        print(f"Output saved to: {result.output_path}")
+    
+    # Example 3: Demonstrate chunking functionality
+    print(f"\nDemonstrating chunking functionality:")
+    reset_excel_position()
+    
+    if os.path.exists(excel_file_path):
+        chunk_count = 0
+        while True:
+            chunk_df, start_row, end_row = read_excel_chunk_with_calamine(excel_file_path, chunk_size=100)
+            
+            if chunk_df.empty:
+                break
+            
+            chunk_count += 1
+            print(f"Chunk {chunk_count}: rows {start_row + 1} to {end_row}, keywords: {len(chunk_df)}")
+            
+            if chunk_count >= 3:  # Only show first 3 chunks for demo
+                break
+        
+        print(f"Total chunks available: {chunk_count}")
+        print(f"Final position: {get_current_excel_position()}")
+    
+    # Example 4: Test playground loop workflow
+    playground_workflow = create_playground_loop_excel_workflow(
+        model_id="o4-mini",
+        session_id="test_playground_loop"
+    )
+    
+    print("\nTesting Playground Loop Excel Processing Workflow...")
+    playground_result = await playground_workflow.arun(base64_excel)
+    print(f"Playground loop workflow result: {playground_result}")
 
 
 if __name__ == "__main__":

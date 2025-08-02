@@ -7,7 +7,7 @@ from agents.seo_keyword_agent import get_seo_keyword_agent
 from agents.enhanced_csv_agent import get_enhanced_csv_agent
 from agents.excel_processor_agent import get_excel_processor_agent
 from workflows.csv_workflow import create_playground_csv_workflow_with_session
-from workflows.excel_workflow import create_playground_excel_workflow
+from workflows.excel_workflow import create_loop_excel_workflow
 
 ######################################################
 ## Routes for the Playground Interface
@@ -25,7 +25,7 @@ excel_processor_agent = get_excel_processor_agent(debug_mode=True)
 csv_workflow = create_playground_csv_workflow_with_session(debug_mode=True)
 
 # Create the Excel workflow for the playground
-excel_workflow = create_playground_excel_workflow(debug_mode=True)
+excel_workflow = create_loop_excel_workflow(debug_mode=True)
 
 # Create a playground instance
 playground = Playground(agents=[web_agent, agno_assist, finance_agent, seo_keyword_agent, enhanced_csv_agent, excel_processor_agent], workflows=[csv_workflow, excel_workflow])
