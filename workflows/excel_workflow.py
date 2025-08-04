@@ -386,6 +386,91 @@ def save_chunk_results_step(step_input: StepInput) -> StepOutput:
         )
 
 
+def accumulate_analysis_results(step_input: StepInput) -> StepOutput:
+    """Accumulate analysis results in a session-specific Excel file."""
+    analysis_result = step_input.previous_step_content
+    print(f"DEBUG: Received analysis result type: {type(analysis_result)}")
+    print(f"DEBUG: Analysis result content: {analysis_result}")
+
+    if isinstance(analysis_result, str) and (analysis_result.startswith("The input could not be processed") or
+                                            analysis_result.startswith("No keywords") or
+                                            analysis_result.startswith("No valid keywords") or
+                                            analysis_result.startswith("Reached end of Excel file")):
+        print(f"DEBUG: Received error message or end of file, not processing analysis results")
+        return StepOutput(
+            content=analysis_result
+        )
+
+    if hasattr(analysis_result, 'valuable_keywords'):
+        valuable_keywords = analysis_result.valuable_keywords
+    else:
+        valuable_keywords = []
+
+    keywords_data = []
+    for keyword_eval in valuable_keywords:
+        keywords_data.append({
+            'keyword': keyword_eval.keyword,
+            'reason': keyword_eval.reason
+        })
+
+    # Get session ID from the workflow context or use a default
+    session_id = 'default'
+    if hasattr(step_input, 'workflow_state') and step_input.workflow_state:
+        session_id = step_input.workflow_state.get('session_id', 'default')
+
+    # Create session-specific Excel file
+    session_excel_file = f"tmp/session_keywords_{session_id}.xlsx"
+    os.makedirs("tmp", exist_ok=True)
+
+    # Load existing results from Excel file
+    existing_keywords = []
+    if os.path.exists(session_excel_file):
+        try:
+            existing_df = pd.read_excel(session_excel_file)
+            existing_keywords = existing_df.to_dict('records')
+        except:
+            existing_keywords = []
+
+    # Add new keywords
+    existing_keywords.extend(keywords_data)
+
+    # Save updated results to Excel file
+    if existing_keywords:
+        df = pd.DataFrame(existing_keywords)
+        df.to_excel(session_excel_file, index=False)
+
+    # Get current position and file info for progress tracking
+    current_pos = get_current_excel_position()
+    excel_file_path = f"tmp/input_excel_{session_id}.xlsx"
+
+    if os.path.exists(excel_file_path):
+        file_info = get_excel_file_info(excel_file_path)
+        remaining_chunks = (file_info.get('remaining_rows', 0) + 99) // 100  # Calculate remaining chunks
+
+        progress_message = f"Successfully processed {len(keywords_data)} valuable keywords from this chunk. "
+        progress_message += f"Total accumulated in session: {len(existing_keywords)} keywords. "
+        progress_message += f"Current position: row {current_pos + 1}. "
+
+        if file_info.get('total_rows', 0) > 0:
+            progress_percentage = (current_pos / file_info['total_rows']) * 100
+            progress_message += f"Progress: {progress_percentage:.1f}% ({current_pos}/{file_info['total_rows']} rows). "
+            progress_message += f"Remaining chunks: {remaining_chunks}. "
+
+        progress_message += f"File: {session_excel_file}"
+
+        # Check if we've reached the end of the file
+        if current_pos >= file_info.get('total_rows', 0):
+            progress_message = f"END_OF_FILE: {progress_message}"
+
+        return StepOutput(
+            content=progress_message
+        )
+    else:
+        return StepOutput(
+            content=f"Successfully processed {len(keywords_data)} valuable keywords from this chunk. Total accumulated in session: {len(existing_keywords)} keywords. File: {session_excel_file}"
+        )
+
+
 def excel_loop_end_condition(outputs: List[StepOutput]) -> bool:
     """
     End condition for Excel processing loop.
@@ -403,19 +488,22 @@ def excel_loop_end_condition(outputs: List[StepOutput]) -> bool:
         elif last_output.content.startswith("Processing complete"):
             print("✅ Excel processing complete - all chunks processed")
             return True
+        elif last_output.content.startswith("Reached end of Excel file"):
+            print("✅ Excel processing complete - reached end of file")
+            return True
 
-    if len(outputs) > 0:
-        total_keywords = 0
-        for output in outputs:
-            if "valuable keywords found" in str(output.content):
-                import re
-                match = re.search(r'(\d+) valuable keywords found', str(output.content))
-                if match:
-                    total_keywords += int(match.group(1))
+    # Check if we have processed any keywords
+    total_keywords = 0
+    for output in outputs:
+        if isinstance(output.content, str) and "valuable keywords found" in output.content:
+            import re
+            match = re.search(r'(\d+) valuable keywords found', output.content)
+            if match:
+                total_keywords += int(match.group(1))
 
-        if total_keywords > 0:
-            print(f"✅ Excel processing continuing - processed {total_keywords} keywords so far")
-            return False
+    if total_keywords > 0:
+        print(f"✅ Excel processing continuing - processed {total_keywords} keywords so far")
+        return False
 
     print("❌ Excel processing continuing - need more chunks")
     return False
@@ -742,87 +830,6 @@ def prepare_excel_chunk_step(step_input: StepInput) -> StepOutput:
         )
 
 
-def accumulate_analysis_results(step_input: StepInput) -> StepOutput:
-    """Accumulate analysis results in a session-specific Excel file."""
-    analysis_result = step_input.previous_step_content
-    print(f"DEBUG: Received analysis result type: {type(analysis_result)}")
-    print(f"DEBUG: Analysis result content: {analysis_result}")
-
-    if isinstance(analysis_result, str) and (analysis_result.startswith("The input could not be processed") or
-                                            analysis_result.startswith("No keywords") or
-                                            analysis_result.startswith("No valid keywords") or
-                                            analysis_result.startswith("Reached end of Excel file")):
-        print(f"DEBUG: Received error message or end of file, not processing analysis results")
-        return StepOutput(
-            content=analysis_result
-        )
-
-    if hasattr(analysis_result, 'valuable_keywords'):
-        valuable_keywords = analysis_result.valuable_keywords
-    else:
-        valuable_keywords = []
-
-    keywords_data = []
-    for keyword_eval in valuable_keywords:
-        keywords_data.append({
-            'keyword': keyword_eval.keyword,
-            'reason': keyword_eval.reason
-        })
-
-    # Get session ID from the workflow context or use a default
-    session_id = 'default'
-    if hasattr(step_input, 'workflow_state') and step_input.workflow_state:
-        session_id = step_input.workflow_state.get('session_id', 'default')
-
-    # Create session-specific Excel file
-    session_excel_file = f"tmp/session_keywords_{session_id}.xlsx"
-    os.makedirs("tmp", exist_ok=True)
-
-    # Load existing results from Excel file
-    existing_keywords = []
-    if os.path.exists(session_excel_file):
-        try:
-            existing_df = pd.read_excel(session_excel_file)
-            existing_keywords = existing_df.to_dict('records')
-        except:
-            existing_keywords = []
-
-    # Add new keywords
-    existing_keywords.extend(keywords_data)
-
-    # Save updated results to Excel file
-    if existing_keywords:
-        df = pd.DataFrame(existing_keywords)
-        df.to_excel(session_excel_file, index=False)
-
-    # Get current position and file info for progress tracking
-    current_pos = get_current_excel_position()
-    excel_file_path = f"tmp/input_excel_{session_id}.xlsx"
-
-    if os.path.exists(excel_file_path):
-        file_info = get_excel_file_info(excel_file_path)
-        remaining_chunks = (file_info.get('remaining_rows', 0) + 99) // 100  # Calculate remaining chunks
-
-        progress_message = f"Successfully processed {len(keywords_data)} valuable keywords from this chunk. "
-        progress_message += f"Total accumulated in session: {len(existing_keywords)} keywords. "
-        progress_message += f"Current position: row {current_pos + 1}. "
-
-        if file_info.get('total_rows', 0) > 0:
-            progress_percentage = (current_pos / file_info['total_rows']) * 100
-            progress_message += f"Progress: {progress_percentage:.1f}% ({current_pos}/{file_info['total_rows']} rows). "
-            progress_message += f"Remaining chunks: {remaining_chunks}. "
-
-        progress_message += f"File: {session_excel_file}"
-
-        return StepOutput(
-            content=progress_message
-        )
-    else:
-        return StepOutput(
-            content=f"Successfully processed {len(keywords_data)} valuable keywords from this chunk. Total accumulated in session: {len(existing_keywords)} keywords. File: {session_excel_file}"
-        )
-
-
 def save_session_results(step_input: StepInput) -> StepOutput:
     """Finalize the session Excel file and provide download link."""
 
@@ -883,9 +890,9 @@ def create_loop_excel_workflow(
             base64_to_excel_step,
             Loop(
                 name="Excel Processing Loop",
-                steps=[process_excel_chunk_step, analysis_agent, save_chunk_results_step],
+                steps=[prepare_excel_chunk_step, analysis_agent, accumulate_analysis_results],
                 end_condition=excel_loop_end_condition,
-                max_iterations=8,
+                max_iterations=50,
             ),
             save_session_results,
         ],
