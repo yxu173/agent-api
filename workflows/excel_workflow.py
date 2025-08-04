@@ -454,7 +454,7 @@ class ExcelProcessor(Workflow):
                            f"---"
                 )
 
-        # Finalize session
+        
         final_results = self.finalize_session(actual_session_id)
         yield WorkflowCompletedEvent(run_id=self.run_id, content=final_results)
 
@@ -624,11 +624,21 @@ class ExcelProcessor(Workflow):
                     session_keywords = []
 
             if session_keywords:
-                result = f"Session complete! Successfully processed {len(session_keywords)} total valuable keywords. Your Excel file is ready: {session_excel_file}"
+                download_url = self.get_download_url(session_id)
+                result = f"🎉 **Session Complete!**\n\n"
+                result += f"📊 **Summary:**\n"
+                result += f"• Total valuable keywords processed: {len(session_keywords)}\n"
+                result += f"• File saved: {session_excel_file}\n"
+                result += f"• File size: {self.get_file_size(session_excel_file)} MB\n\n"
+                result += f"📥 **Download your results:**\n"
+                result += f"🔗 {download_url}\n\n"
+                result += f"💡 **What's in the file:**\n"
+                result += f"• Keyword: The valuable keyword\n"
+                result += f"• Reason: Why this keyword was selected as valuable\n\n"
+                result += f"✅ Your Excel file is ready for download!"
             else:
                 result = "Session complete! No valuable keywords found in this session."
 
-            
             if session_id:
                 self.add_results_to_cache(session_id, result)
 
@@ -637,6 +647,33 @@ class ExcelProcessor(Workflow):
         except Exception as e:
             logger.error(f"Error finalizing session: {e}")
             return f"Error finalizing session: {str(e)}"
+
+    def get_download_url(self, session_id: str) -> str:
+        """Generate download URL based on environment."""
+        try:
+            from api.settings import api_settings
+            base_url = api_settings.get_base_url()
+        except ImportError:
+            # Fallback if API settings are not available
+            import os
+            is_development = os.getenv("ENVIRONMENT", "development").lower() == "development"
+            if is_development:
+                base_url = "http://localhost:8000"
+            else:
+                base_url = os.getenv("PRODUCTION_URL", "https://your-domain.com")
+        
+        return f"{base_url}/v1/downloads/excel/{session_id}"
+
+    def get_file_size(self, file_path: str) -> str:
+        """Get file size in MB."""
+        try:
+            if os.path.exists(file_path):
+                size_bytes = os.path.getsize(file_path)
+                size_mb = size_bytes / (1024 * 1024)
+                return f"{size_mb:.2f}"
+            return "0.00"
+        except Exception:
+            return "0.00"
 
     def extract_keywords_for_display(self, chunk_df: pd.DataFrame, start_row: int, end_row: int) -> str:
         """Extract and format keywords for display."""

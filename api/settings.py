@@ -14,6 +14,11 @@ class ApiSettings(BaseSettings):
     # Set to False to disable docs at /docs and /redoc
     docs_enabled: bool = True
 
+    # Environment configuration
+    environment: str = "development"
+    dev_base_url: str = "http://localhost:8000"
+    production_url: str = "https://your-domain.com"
+
     # Cors origin list to allow requests from.
     # This list is set using the set_cors_origin_list validator
     # which uses the runtime_env variable to set the
@@ -32,6 +37,13 @@ class ApiSettings(BaseSettings):
         valid_cors.append("http://localhost:3000")
 
         return valid_cors
+
+    def get_base_url(self) -> str:
+        """Get the appropriate base URL based on environment."""
+        if self.environment.lower() == "production":
+            return self.production_url
+        else:
+            return self.dev_base_url
 
 
 # Create ApiSettings object
