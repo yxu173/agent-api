@@ -328,6 +328,10 @@ class ExcelProcessor(Workflow):
         if self.run_id is None:
             raise ValueError("Run ID is not set")
 
+        # Get the actual session ID from the workflow
+        actual_session_id = session_id or self.session_id or 'default'
+        logger.info(f"Using session ID: {actual_session_id}")
+
         # Convert chunk_size string to int
         try:
             chunk_size_int = int(chunk_size)
@@ -342,7 +346,7 @@ class ExcelProcessor(Workflow):
         self.keyword_analyzer.instructions = self.get_agent_instructions(niche)
 
         # Convert base64 to Excel file
-        excel_file_path = self.convert_base64_to_excel(base64_string, session_id)
+        excel_file_path = self.convert_base64_to_excel(base64_string, actual_session_id)
         if not excel_file_path:
             yield WorkflowCompletedEvent(
                 run_id=self.run_id,
@@ -433,7 +437,7 @@ class ExcelProcessor(Workflow):
                     valuable_keywords.append(keyword_eval.keyword)
 
                 total_keywords += len(keywords_data)
-                self.save_keywords_to_session(session_id, keywords_data)
+                self.save_keywords_to_session(actual_session_id, keywords_data)
 
                 # Show chunk results
                 yield RunResponse(
@@ -450,8 +454,8 @@ class ExcelProcessor(Workflow):
                            f"---"
                 )
 
-       
-        final_results = self.finalize_session(session_id)
+        # Finalize session
+        final_results = self.finalize_session(actual_session_id)
         yield WorkflowCompletedEvent(run_id=self.run_id, content=final_results)
 
     def get_cached_results(self, session_id: str) -> Optional[str]:
