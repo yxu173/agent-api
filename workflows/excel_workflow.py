@@ -267,9 +267,9 @@ ________________________________________________________________
 **The inputs you will get:**
 - Keywords: insert keywords
 - Category of each keyword: category ( these categories are beneath the given niche.
-NICHE IS { "{niche}" } FOR ALL KEYWORDS
+NICHE IS { niche } FOR ALL KEYWORDS
 ________________________________________________________________
-First: analyze the keywords carefully to understand its context and its intent ( informational - commercial - Navigational - Transactional ), to determine the target audience whether it is (beginners OR intermediates OR experts) for the keywords. 
+First: analyze the keywords carefully to understand its context and its intent ( informational - commercial - Navigational - Transactional ), to determine the target audience whether it is (beginners OR intermediates OR experts) for the keywords.
 ________________________________________________________________
 **Now,follow the following criteria to choose the valuable keywords:**
 1-Give all Keywords the same level of attention.
@@ -369,7 +369,7 @@ The instructions are finished, so after analyzing and understanding them well an
         file_info = get_excel_file_info(excel_file_path)
         total_rows = file_info.get('total_rows', 0)
         column_names = file_info.get('column_names', [])
-        
+
         # Initial progress message
         yield RunResponse(
             run_id=self.run_id,
@@ -386,14 +386,14 @@ The instructions are finished, so after analyzing and understanding them well an
         # Process Excel file in chunks
         total_keywords = 0
         chunk_number = 0
-        
+
         while has_more_chunks(excel_file_path):
             chunk_number += 1
             current_pos = get_current_excel_position()
-            
+
             # Read chunk
             chunk_df, start_row, end_row = read_excel_chunk_with_calamine(excel_file_path, chunk_size=chunk_size_int)
-            
+
             if chunk_df.empty:
                 break
 
@@ -417,7 +417,7 @@ The instructions are finished, so after analyzing and understanding them well an
 
             # Extract keywords for display
             keywords_for_display = self.extract_keywords_for_display(chunk_df, start_row, end_row)
-            
+
             # Show chunk processing start
             yield RunResponse(
                 run_id=self.run_id,
@@ -465,7 +465,7 @@ The instructions are finished, so after analyzing and understanding them well an
                            f"---"
                 )
 
-        
+
         final_results = self.finalize_session(actual_session_id)
         yield WorkflowCompletedEvent(run_id=self.run_id, content=final_results)
 
@@ -489,7 +489,7 @@ The instructions are finished, so after analyzing and understanding them well an
             if not base64_string:
                 return None
 
-            
+
             try:
                 import re
                 if not re.match(r'^[A-Za-z0-9+/]*={0,2}$', base64_string):
@@ -497,7 +497,7 @@ The instructions are finished, so after analyzing and understanding them well an
             except Exception:
                 return None
 
-           
+
             try:
                 excel_bytes = base64.b64decode(base64_string)
             except Exception:
@@ -506,7 +506,7 @@ The instructions are finished, so after analyzing and understanding them well an
             if not excel_bytes:
                 return None
 
-            
+
             try:
                 excel_signatures = [
                     b'\x50\x4B\x03\x04',
@@ -519,7 +519,7 @@ The instructions are finished, so after analyzing and understanding them well an
             except Exception:
                 pass
 
-           
+
             session_id = session_id or 'default'
             excel_file_path = f"tmp/input_excel_{session_id}.xlsx"
 
@@ -556,7 +556,7 @@ The instructions are finished, so after analyzing and understanding them well an
             keyword_column = None
             category_column = None
 
-            
+
             for col in chunk_df.columns:
                 col_lower = str(col).lower()
                 if any(keyword in col_lower for keyword in ['keyword', 'term', 'phrase', 'word']):
@@ -600,7 +600,7 @@ The instructions are finished, so after analyzing and understanding them well an
             session_id = session_id or 'default'
             session_excel_file = f"tmp/session_keywords_{session_id}.xlsx"
 
-            
+
             existing_keywords = []
             if os.path.exists(session_excel_file):
                 try:
@@ -609,10 +609,10 @@ The instructions are finished, so after analyzing and understanding them well an
                 except:
                     existing_keywords = []
 
-           
+
             existing_keywords.extend(keywords_data)
 
-            
+
             if existing_keywords:
                 df = pd.DataFrame(existing_keywords)
                 df.to_excel(session_excel_file, index=False)
@@ -672,7 +672,7 @@ The instructions are finished, so after analyzing and understanding them well an
                 base_url = "http://localhost:8000"
             else:
                 base_url = os.getenv("PRODUCTION_URL", "https://your-domain.com")
-        
+
         return f"{base_url}/v1/downloads/excel/{session_id}"
 
     def get_file_size(self, file_path: str) -> str:
@@ -692,7 +692,7 @@ The instructions are finished, so after analyzing and understanding them well an
             keyword_column = None
             category_column = None
 
-            
+
             for col in chunk_df.columns:
                 col_lower = str(col).lower()
                 if any(keyword in col_lower for keyword in ['keyword', 'term', 'phrase', 'word']):
@@ -713,15 +713,15 @@ The instructions are finished, so after analyzing and understanding them well an
                         'category': category
                     })
 
-           
+
             if keywords_with_category:
                 display_lines = []
                 for i, item in enumerate(keywords_with_category[:15]):
                     display_lines.append(f"• {item['keyword']} ({item['category']})")
-                
+
                 if len(keywords_with_category) > 15:
                     display_lines.append(f"... and {len(keywords_with_category) - 15} more")
-                
+
                 return '\n'.join(display_lines)
             else:
                 return "No valid keywords found in this chunk."
@@ -734,12 +734,12 @@ The instructions are finished, so after analyzing and understanding them well an
         """Format sample reasons for display."""
         if not keywords_data:
             return "No reasons available."
-        
+
         formatted_reasons = []
         for item in keywords_data:
             reason = item['reason'][:100] + "..." if len(item['reason']) > 100 else item['reason']
             formatted_reasons.append(f"• **{item['keyword']}**: {reason}")
-        
+
         return '\n'.join(formatted_reasons)
 
     def get_agent_instructions(self, niche: str) -> str:
@@ -753,9 +753,9 @@ ________________________________________________________________
 **The inputs you will get:**
 - Keywords: insert keywords
 - Category of each keyword: category ( these categories are beneath the given niche.
-NICHE IS { "{niche}" } FOR ALL KEYWORDS
+NICHE IS { niche } FOR ALL KEYWORDS
 ________________________________________________________________
-First: analyze the keywords carefully to understand its context and its intent ( informational - commercial - Navigational - Transactional ), to determine the target audience whether it is (beginners OR intermediates OR experts) for the keywords. 
+First: analyze the keywords carefully to understand its context and its intent ( informational - commercial - Navigational - Transactional ), to determine the target audience whether it is (beginners OR intermediates OR experts) for the keywords.
 ________________________________________________________________
 **Now,follow the following criteria to choose the valuable keywords:**
 1-Give all Keywords the same level of attention.
